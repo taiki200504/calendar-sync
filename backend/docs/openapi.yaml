@@ -1,0 +1,780 @@
+openapi: 3.0.3
+info:
+  title: CalendarSync OS API
+  description: 複数のGoogleカレンダーを双方向同期するシステムのAPI仕様
+  version: 1.0.0
+  contact:
+    name: CalendarSync OS Support
+
+servers:
+  - url: http://localhost:3000/api
+    description: 開発環境
+  - url: https://api.calendarsync.example.com/api
+    description: 本番環境
+
+tags:
+  - name: Auth
+    description: 認証関連
+  - name: Accounts
+    description: アカウント管理
+  - name: Calendars
+    description: カレンダー管理
+  - name: Sync
+    description: 同期機能
+  - name: Conflicts
+    description: 競合解決
+  - name: FreeBusy
+    description: 空き時間検索
+
+paths:
+  /auth/google:
+    get:
+      tags:
+        - Auth
+      summary: Google OAuth認証URL取得
+      description: Google OAuth認証のURLを取得してリダイレクト
+      responses:
+        '302':
+          description: Google認証ページへリダイレクト
+        '500':
+          description: エラー
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/google/callback:
+    get:
+      tags:
+        - Auth
+      summary: OAuthコールバック処理
+      parameters:
+        - name: code
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: state
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '302':
+          description: フロントエンドへリダイレクト
+        '400':
+          description: バリデーションエラー
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+
+  /auth/me:
+    get:
+      tags:
+        - Auth
+      summary: 現在の認証状態を取得
+      security:
+        - sessionAuth: []
+      responses:
+        '200':
+          description: アカウント情報
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Account'
+        '401':
+          description: 未認証
+
+  /auth/logout:
+    post:
+      tags:
+        - Auth
+      summary: ログアウト
+      security:
+        - sessionAuth: []
+      responses:
+        '200':
+          description: ログアウト成功
+
+  /accounts:
+    get:
+      tags:
+        - Accounts
+      summary: アカウント一覧取得
+      security:
+        - sessionAuth: []
+      responses:
+        '200':
+          description: アカウント一覧
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accounts:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Account'
+
+    delete:
+      tags:
+        - Accounts
+      summary: アカウント削除
+      security:
+        - sessionAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: 削除成功
+        '404':
+          description: アカウントが見つかりません
+
+  /calendars:
+    get:
+      tags:
+        - Calendars
+      summary: カレンダー一覧取得
+      security:
+        - sessionAuth: []
+      responses:
+        '200':
+          description: カレンダー一覧
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  calendars:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Calendar'
+
+  /calendars/{accountId}/sync:
+    post:
+      tags:
+        - Calendars
+      summary: カレンダー同期
+      security:
+        - sessionAuth: []
+      parameters:
+        - name: accountId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: 同期成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  calendars:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Calendar'
+
+  /calendars/{id}:
+    patch:
+      tags:
+        - Calendars
+      summary: カレンダー設定更新
+      security:
+        - sessionAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                sync_enabled:
+                  type: boolean
+                privacy_mode:
+                  type: string
+                  enum: [detail, busy-only]
+                sync_direction:
+                  type: string
+                  enum: [bidirectional, readonly, writeonly]
+      responses:
+        '200':
+          description: 更新成功
+
+  /calendars/{calendarId}/events:
+    post:
+      tags:
+        - Calendars
+      summary: イベント作成
+      security:
+        - sessionAuth: []
+      parameters:
+        - name: calendarId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - title
+                - start_at
+                - end_at
+              properties:
+                title:
+                  type: string
+                start_at:
+                  type: string
+                  format: date-time
+                end_at:
+                  type: string
+                  format: date-time
+                location:
+                  type: string
+                description:
+                  type: string
+      responses:
+        '201':
+          description: イベント作成成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  event:
+                    $ref: '#/components/schemas/Event'
+
+  /sync/manual:
+    post:
+      tags:
+        - Sync
+      summary: 手動同期実行
+      security:
+        - sessionAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                calendarIds:
+                  type: array
+                  items:
+                    type: string
+                    format: uuid
+      responses:
+        '200':
+          description: 同期開始
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  calendarsQueued:
+                    type: number
+                  jobIds:
+                    type: array
+                    items:
+                      type: string
+
+  /sync/logs:
+    get:
+      tags:
+        - Sync
+      summary: 同期ログ取得
+      security:
+        - sessionAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+      responses:
+        '200':
+          description: 同期ログ
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  logs:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SyncLog'
+
+  /sync/history:
+    get:
+      tags:
+        - Sync
+      summary: 同期履歴取得
+      security:
+        - sessionAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: 同期履歴
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SyncLog'
+                  total:
+                    type: integer
+                  limit:
+                    type: integer
+                  offset:
+                    type: integer
+
+  /sync/status:
+    get:
+      tags:
+        - Sync
+      summary: 同期ステータス取得（全体統計）
+      security:
+        - sessionAuth: []
+      responses:
+        '200':
+          description: 同期ステータス
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  enabledCalendars:
+                    type: number
+                  totalCalendars:
+                    type: number
+                  successRate:
+                    type: number
+                  errorCount:
+                    type: number
+                  last7Days:
+                    type: object
+                    properties:
+                      success:
+                        type: number
+                      errors:
+                        type: number
+                      total:
+                        type: number
+
+  /sync/status/{jobId}:
+    get:
+      tags:
+        - Sync
+      summary: 同期ステータス取得（ジョブID指定）
+      security:
+        - sessionAuth: []
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: ジョブステータス
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  jobId:
+                    type: string
+                  state:
+                    type: string
+                    enum: [completed, active, delayed, failed, waiting]
+                  progress:
+                    type: number
+                  result:
+                    type: object
+                  failedReason:
+                    type: string
+
+  /conflicts:
+    get:
+      tags:
+        - Conflicts
+      summary: 競合一覧取得
+      security:
+        - sessionAuth: []
+      responses:
+        '200':
+          description: 競合一覧
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  conflicts:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Conflict'
+
+  /conflicts/{id}:
+    get:
+      tags:
+        - Conflicts
+      summary: 競合詳細取得
+      security:
+        - sessionAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: 競合詳細
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  conflict:
+                    $ref: '#/components/schemas/Conflict'
+        '404':
+          description: 競合が見つかりません
+
+  /conflicts/{id}/resolve:
+    post:
+      tags:
+        - Conflicts
+      summary: 競合解決
+      security:
+        - sessionAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - strategy
+              properties:
+                strategy:
+                  type: string
+                  enum: [adopt-A, adopt-B, manual]
+                adoptLinkId:
+                  type: string
+                  format: uuid
+                manualData:
+                  type: object
+                  properties:
+                    title:
+                      type: string
+                    start_at:
+                      type: string
+                      format: date-time
+                    end_at:
+                      type: string
+                      format: date-time
+                    location:
+                      type: string
+                    description:
+                      type: string
+      responses:
+        '200':
+          description: 解決成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  canonicalId:
+                    type: string
+
+  /freebusy/search:
+    post:
+      tags:
+        - FreeBusy
+      summary: 空き時間検索
+      security:
+        - sessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SearchParams'
+      responses:
+        '200':
+          description: 空き時間一覧
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  slots:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/FreeSlot'
+
+components:
+  securitySchemes:
+    sessionAuth:
+      type: apiKey
+      in: cookie
+      name: connect.sid
+      description: セッション認証
+
+  schemas:
+    Account:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        provider:
+          type: string
+          default: google
+        workspace_flag:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Calendar:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        account_id:
+          type: string
+          format: uuid
+        account_email:
+          type: string
+          format: email
+        gcal_calendar_id:
+          type: string
+        name:
+          type: string
+          nullable: true
+        sync_enabled:
+          type: boolean
+        privacy_mode:
+          type: string
+          enum: [detail, busy-only]
+        sync_direction:
+          type: string
+          enum: [bidirectional, readonly, writeonly]
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Event:
+      type: object
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        start:
+          type: string
+          format: date-time
+        end:
+          type: string
+          format: date-time
+        location:
+          type: string
+          nullable: true
+        description:
+          type: string
+          nullable: true
+
+    Conflict:
+      type: object
+      properties:
+        canonicalId:
+          type: string
+          format: uuid
+        title:
+          type: string
+        variants:
+          type: array
+          items:
+            type: object
+            properties:
+              eventLinkId:
+                type: string
+                format: uuid
+              accountEmail:
+                type: string
+                format: email
+              calendarName:
+                type: string
+              data:
+                type: object
+                properties:
+                  start:
+                    type: string
+                    format: date-time
+                  end:
+                    type: string
+                    format: date-time
+                  location:
+                    type: string
+                    nullable: true
+                  description:
+                    type: string
+                    nullable: true
+              lastModified:
+                type: string
+                format: date-time
+
+    SyncLog:
+      type: object
+      properties:
+        id:
+          type: integer
+        timestamp:
+          type: string
+          format: date-time
+        operation:
+          type: string
+        from_account_id:
+          type: string
+          format: uuid
+        to_account_id:
+          type: string
+          format: uuid
+        event_id:
+          type: string
+        result:
+          type: string
+        error:
+          type: string
+          nullable: true
+        metadata:
+          type: object
+          nullable: true
+
+    SearchParams:
+      type: object
+      required:
+        - period
+        - duration
+        - businessHoursStart
+        - businessHoursEnd
+        - buffer
+        - preferredDays
+      properties:
+        period:
+          type: string
+          enum: [thisWeek, nextWeek, custom]
+        duration:
+          type: integer
+          description: 分単位
+        businessHoursStart:
+          type: string
+          pattern: '^[0-9]{2}:[0-9]{2}$'
+          description: HH:mm形式
+        businessHoursEnd:
+          type: string
+          pattern: '^[0-9]{2}:[0-9]{2}$'
+          description: HH:mm形式
+        buffer:
+          type: integer
+          description: 分単位
+        preferredDays:
+          type: array
+          items:
+            type: integer
+            minimum: 0
+            maximum: 6
+          description: 0=日曜, 1=月曜, ..., 6=土曜
+        customStartDate:
+          type: string
+          format: date
+          description: periodがcustomの場合
+        customEndDate:
+          type: string
+          format: date
+          description: periodがcustomの場合
+
+    FreeSlot:
+      type: object
+      properties:
+        start:
+          type: string
+          format: date-time
+        end:
+          type: string
+          format: date-time
+        score:
+          type: number
+          minimum: 0
+          maximum: 100
+        reason:
+          type: string
+
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+          nullable: true

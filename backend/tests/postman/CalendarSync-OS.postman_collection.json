@@ -1,0 +1,306 @@
+{
+  "info": {
+    "name": "CalendarSync OS API",
+    "description": "CalendarSync OS API テストコレクション",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "OAuth認証開始",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/auth/google",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "google"]
+            },
+            "description": "Google OAuth認証URLを取得してリダイレクト"
+          },
+          "response": []
+        },
+        {
+          "name": "認証状態確認",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "{{session_cookie}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/auth/me",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "me"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "ログアウト",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "{{session_cookie}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/auth/logout",
+              "host": ["{{base_url}}"],
+              "path": ["auth", "logout"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Accounts",
+      "item": [
+        {
+          "name": "アカウント一覧取得",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "{{session_cookie}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/accounts",
+              "host": ["{{base_url}}"],
+              "path": ["accounts"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "アカウント削除",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "{{session_cookie}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/accounts/:id",
+              "host": ["{{base_url}}"],
+              "path": ["accounts", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "account-uuid"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Calendars",
+      "item": [
+        {
+          "name": "カレンダー一覧取得",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "{{session_cookie}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/calendars",
+              "host": ["{{base_url}}"],
+              "path": ["calendars"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "カレンダー設定更新",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Cookie",
+                "value": "{{session_cookie}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sync_enabled\": true,\n  \"sync_direction\": \"bidirectional\",\n  \"privacy_mode\": \"detail\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/calendars/:id",
+              "host": ["{{base_url}}"],
+              "path": ["calendars", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "calendar-uuid"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "カレンダー同期",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "{{session_cookie}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/calendars/:accountId/sync",
+              "host": ["{{base_url}}"],
+              "path": ["calendars", ":accountId", "sync"],
+              "variable": [
+                {
+                  "key": "accountId",
+                  "value": "account-uuid"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "FreeBusy",
+      "item": [
+        {
+          "name": "空き時間検索",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Cookie",
+                "value": "{{session_cookie}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"accountIds\": [\"account-uuid-1\", \"account-uuid-2\"],\n  \"startDate\": \"2024-01-15T00:00:00Z\",\n  \"endDate\": \"2024-01-20T23:59:59Z\",\n  \"duration\": 60,\n  \"workingHours\": {\n    \"start\": 9,\n    \"end\": 18\n  },\n  \"buffer\": 15,\n  \"travelTime\": 30,\n  \"preferredDays\": [1, 2, 3, 4, 5]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/freebusy/search",
+              "host": ["{{base_url}}"],
+              "path": ["freebusy", "search"]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Rules",
+      "item": [
+        {
+          "name": "除外ルール一覧取得",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "{{session_cookie}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/rules/exclusions",
+              "host": ["{{base_url}}"],
+              "path": ["rules", "exclusions"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "除外ルール作成",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Cookie",
+                "value": "{{session_cookie}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"condition_type\": \"title_contains\",\n  \"value\": \"会議\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/rules/exclusions",
+              "host": ["{{base_url}}"],
+              "path": ["rules", "exclusions"]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "除外ルール削除",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "{{session_cookie}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/rules/exclusions/:id",
+              "host": ["{{base_url}}"],
+              "path": ["rules", "exclusions", ":id"],
+              "variable": [
+                {
+                  "key": "id",
+                  "value": "rule-uuid"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3000/api",
+      "type": "string"
+    },
+    {
+      "key": "session_cookie",
+      "value": "connect.sid=YOUR_SESSION_ID",
+      "type": "string"
+    }
+  ]
+}

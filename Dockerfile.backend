@@ -1,0 +1,40 @@
+# Backend Dockerfile
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# 依存関係をインストール
+COPY backend/package*.json ./
+RUN npm ci
+
+# ソースコードをコピー
+COPY backend/ ./
+
+# TypeScriptをビルド
+RUN npm run build
+
+# 本番環境用イメージ
+FROM node:20-alpine
+
+WORKDIR /app
+
+# 本番用の依存関係のみインストール
+COPY backend/package*.json ./
+RUN npm ci --only=production
+
+# ビルド済みファイルをコピー
+COPY --from=builder /app/dist ./dist
+
+# マイグレーションファイルをコピー
+COPY --from=builder /app/migrations ./migrations
+COPY --from=builder /app/node_modules/node-pg-migrate ./node_modules/node-pg-migrate
+
+# ポートを公開
+EXPOSE 3000
+
+# ヘルスチェック
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+  CMD node -e "require('http').get('http://localhost:3000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
+
+# アプリケーションを起動
+CMD ["npm", "start"]

@@ -1,0 +1,40 @@
+node_modules
+npm-debug.log
+.env
+.env.local
+.env.*.local
+dist
+build
+.git
+.gitignore
+README.md
+*.md
+.vscode
+.idea
+*.log
+.DS_Store
+coverage
+.nyc_output
+*.swp
+*.swo
+*~
+
+# Backend specific
+backend/dist
+backend/coverage
+backend/.env*
+
+# Frontend specific
+frontend/dist
+frontend/.env*
+frontend/.vite
+
+# Docker
+docker-compose.yml
+docker-compose.prod.yml
+Dockerfile*
+.dockerignore
+
+# Scripts
+scripts
+*.sh
