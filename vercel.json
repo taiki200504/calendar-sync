@@ -4,11 +4,6 @@
   "outputDirectory": "frontend/dist",
   "installCommand": "npm install && cd backend && npm install && cd ../frontend && npm install",
   "framework": null,
-  "functions": {
-    "api/**/*.ts": {
-      "runtime": "@vercel/node"
-    }
-  },
   "rewrites": [
     {
       "source": "/api/(.*)",
