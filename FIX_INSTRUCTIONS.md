@@ -14,23 +14,13 @@
 
 ## 🔴 あなたが実施する必要があること
 
-### ステップ1: Vercelの環境変数を更新
+### ステップ1: Vercelの環境変数を確認 ✅
 
-以下のコマンドを実行して、環境変数を正しい値に更新してください：
+環境変数は既に正しい値に設定されています：
+- ✅ `FRONTEND_URL="https://calendar-sync-os.vercel.app"`（末尾のスラッシュなし）
+- ✅ `GOOGLE_REDIRECT_URI="https://calendar-sync-os.vercel.app/api/auth/google/callback"`
 
-```bash
-cd "/Users/taikimishima/Developer/CalendarSync OS"
-
-# 1. FRONTEND_URLを更新（末尾のスラッシュを削除）
-echo "https://calendar-sync-os.vercel.app" | vercel env add FRONTEND_URL production
-
-# 2. GOOGLE_REDIRECT_URIを更新（実際のVercelドメインに合わせる）
-echo "https://calendar-sync-os.vercel.app/api/auth/google/callback" | vercel env add GOOGLE_REDIRECT_URI production
-```
-
-**注意**: 
-- `FRONTEND_URL`の値は**末尾にスラッシュを付けない**でください
-- `GOOGLE_REDIRECT_URI`は実際のVercelドメインに合わせてください（`calendar-sync-os.vercel.app`の部分）
+**確認済み** - 追加の作業は不要です。
 
 ### ステップ2: Google Cloud Consoleの設定を確認
 
