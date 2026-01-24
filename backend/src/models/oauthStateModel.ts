@@ -35,7 +35,7 @@ class OAuthStateModel {
       return result.rows[0];
     } catch (error: any) {
       // データベース接続エラーの詳細をログに記録
-      const { logger } = await import('../utils/logger');
+      const { logger } = await import('../utils/logger.js');
       logger.error('OAuthStateModel.create - Database error', {
         error: error.message,
         code: error.code,
