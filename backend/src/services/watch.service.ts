@@ -1,6 +1,4 @@
 import { google } from 'googleapis';
-import { v4 as uuidv4 } from 'uuid';
-// uuidパッケージはESMモジュールですが、esModuleInteropによりCommonJSからもインポート可能です
 import { watchModel, WatchChannel } from '../models/watch.model';
 import { calendarModel } from '../models/calendarModel';
 import { accountModel } from '../models/accountModel';
@@ -37,6 +35,7 @@ class WatchService {
     const calendarApi = google.calendar({ version: 'v3', auth });
 
     // channelIdを生成（UUID）
+    const { v4: uuidv4 } = await import('uuid');
     const channelId = uuidv4();
 
     // 7日後の有効期限

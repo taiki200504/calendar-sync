@@ -5,7 +5,6 @@ import { eventLinkModel } from '../models/event-link.model';
 import { computeEventHash } from '../utils/event-hash';
 import { EventLink } from '../models/event-link.model';
 import { db } from '../utils/database';
-import { v4 as uuidv4 } from 'uuid';
 import { NotFoundError, ValidationError } from '../utils/errors';
 import { logger } from '../utils/logger';
 import { propagationService } from './propagation.service';
@@ -135,6 +134,7 @@ class SyncService {
     await this.updateCanonical(canonicalEvent.id, googleEvent);
 
     // e. EventLink更新
+    const { v4: uuidv4 } = await import('uuid');
     const syncOpId = uuidv4();
     const updatedEventLink = await eventLinkModel.upsert({
       canonical_event_id: canonicalEvent.id,
