@@ -10,10 +10,21 @@ export default defineConfig({
     },
     dedupe: ['react', 'react-dom']
   },
+  optimizeDeps: {
+    include: ['react', 'react-dom', 'react-router-dom']
+  },
   build: {
     commonjsOptions: {
       include: [/node_modules/],
       transformMixedEsModules: true
+    },
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'react-vendor': ['react', 'react-dom'],
+          'router-vendor': ['react-router-dom']
+        }
+      }
     }
   },
   server: {
