@@ -34,9 +34,22 @@ class OAuthStateModel {
       );
       return result.rows[0];
     } catch (error: any) {
+      // データベース接続エラーの詳細をログに記録
+      const { logger } = await import('../utils/logger');
+      logger.error('OAuthStateModel.create - Database error', {
+        error: error.message,
+        code: error.code,
+        errno: error.errno,
+        syscall: error.syscall,
+        hostname: error.hostname,
+        port: error.port,
+        address: error.address,
+        state: data.state
+      });
+      
       // データベース接続エラー
       if (error.code === 'ENOTFOUND' || error.message?.includes('getaddrinfo') || error.message?.includes('ENOTFOUND')) {
-        throw new Error(`Database connection failed: ${error.message}. Please check DATABASE_URL environment variable in Vercel.`);
+        throw new Error(`Database connection failed: ${error.message} (code: ${error.code}, hostname: ${error.hostname || 'unknown'}). Please check DATABASE_URL environment variable in Vercel and ensure the Supabase project is active.`);
       }
       // テーブルが存在しない場合のエラーを検出
       if (error.code === '42P01' || error.message?.includes('does not exist') || error.message?.includes('oauth_states')) {

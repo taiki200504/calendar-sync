@@ -92,15 +92,62 @@ function getPool(): Pool {
   if (!pool) {
     try {
       pool = createPool();
+      
+      // 接続イベントのログ
+      pool.on('connect', (client) => {
+        try {
+          logger.info('Database client connected', {
+            totalCount: pool?.totalCount,
+            idleCount: pool?.idleCount,
+            waitingCount: pool?.waitingCount
+          });
+        } catch {
+          console.log('Database client connected');
+        }
+      });
+      
       pool.on('error', (err) => {
         try {
-          logger.error('Unexpected error on idle client', { error: err });
+          logger.error('Unexpected error on idle client', { 
+            error: err.message,
+            code: err.code,
+            errno: err.errno,
+            syscall: err.syscall,
+            hostname: err.hostname,
+            port: err.port
+          });
         } catch {
           console.error('Unexpected error on idle client:', err);
         }
         // Serverless Functionsではprocess.exit()を避ける
       });
-    } catch (error) {
+      
+      // プールの初期化をログに記録
+      try {
+        logger.info('Database pool created', {
+          hasConnectionString: !!databaseUrl,
+          isSupabase: isSupabase,
+          vercel: !!process.env.VERCEL
+        });
+      } catch {
+        console.log('Database pool created');
+      }
+    } catch (error: any) {
+      // 初期化エラーの詳細をログに記録
+      try {
+        logger.error('Failed to create database pool', {
+          error: error.message,
+          code: error.code,
+          errno: error.errno,
+          syscall: error.syscall,
+          hostname: error.hostname,
+          port: error.port,
+          databaseUrl: databaseUrl ? 'set' : 'not set',
+          databaseUrlLength: databaseUrl?.length || 0
+        });
+      } catch {
+        console.error('Failed to create database pool:', error);
+      }
       // 初期化エラーを再スロー
       throw error;
     }
@@ -119,7 +166,44 @@ export const db = {
     text: string | QueryConfig,
     params?: unknown[]
   ): Promise<QueryResult<T>> => {
-    return getPool().query<T>(text, params);
+    try {
+      const pool = getPool();
+      return pool.query<T>(text, params).catch((error: any) => {
+        // クエリ実行時のエラーを詳細にログに記録
+        try {
+          logger.error('Database query error', {
+            error: error.message,
+            code: error.code,
+            errno: error.errno,
+            syscall: error.syscall,
+            hostname: error.hostname,
+            port: error.port,
+            query: typeof text === 'string' ? text.substring(0, 100) : 'QueryConfig',
+            poolTotalCount: pool.totalCount,
+            poolIdleCount: pool.idleCount,
+            poolWaitingCount: pool.waitingCount
+          });
+        } catch {
+          console.error('Database query error:', error);
+        }
+        throw error;
+      });
+    } catch (error: any) {
+      // プール取得時のエラーを詳細にログに記録
+      try {
+        logger.error('Failed to get database pool', {
+          error: error.message,
+          code: error.code,
+          errno: error.errno,
+          syscall: error.syscall,
+          hostname: error.hostname,
+          port: error.port
+        });
+      } catch {
+        console.error('Failed to get database pool:', error);
+      }
+      throw error;
+    }
   },
   get pool() {
     return getPool();
