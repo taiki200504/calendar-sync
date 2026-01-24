@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { oauthService } from '../services/oauth.service';
+import { oauthStateModel } from '../models/oauthStateModel';
 import crypto from 'crypto';
 import { logger } from '../utils/logger';
 import { toAppError } from '../utils/errors';
@@ -27,29 +28,22 @@ authRouter.get('/google', async (req: Request, res: Response) => {
     // CSRF対策のためのstateパラメータを生成
     const state = crypto.randomBytes(32).toString('hex');
     
-    // セッションにstateを保存
-    req.session.oauthState = state;
-    
-    // アカウント追加モードかどうかを保存
+    // アカウント追加モードかどうかを確認
     const addAccount = req.query.addAccount === 'true';
-    if (addAccount) {
-      req.session.addAccountMode = true;
-      // 既存のaccountIdを保存（新しいアカウント追加後も維持するため）
-      req.session.originalAccountId = req.session.accountId;
+    let originalAccountId: string | null = null;
+    
+    if (addAccount && req.session.accountId) {
+      originalAccountId = req.session.accountId;
     }
     
-    // セッションを明示的に保存（Vercel Serverless Functions対応）
-    await new Promise<void>((resolve, reject) => {
-      req.session.save((err) => {
-        if (err) {
-          logger.error('Failed to save session', { error: err });
-          reject(err);
-        } else {
-          logger.info('Session saved', { state, sessionId: req.sessionID });
-          resolve();
-        }
-      });
+    // stateをデータベースに保存（セッションクッキーに依存しない）
+    await oauthStateModel.create({
+      state,
+      addAccountMode: addAccount,
+      originalAccountId
     });
+    
+    logger.info('OAuth state saved to database', { state, addAccount, originalAccountId });
     
     // OAuth認証URLを生成
     const authUrl = oauthService.getAuthUrl(state);
@@ -95,37 +89,42 @@ authRouter.get('/google/callback', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'State parameter is required' });
     }
 
-    const sessionState = req.session.oauthState;
+    // stateをデータベースから取得して削除（ワンタイム使用、セッションクッキーに依存しない）
+    const savedState = await oauthStateModel.findAndDelete(state);
     
-    // デバッグ用ログ
-    logger.info('Session state check', {
-      hasSession: !!req.session,
-      sessionId: req.sessionID,
-      oauthState: req.session.oauthState,
-      receivedState: state,
-      match: req.session.oauthState === state
-    });
-    
-    if (!sessionState || sessionState !== state) {
-      logger.error('Invalid state parameter', {
-        sessionState: sessionState || 'null',
+    if (!savedState) {
+      logger.error('Invalid state parameter - not found in database', {
         receivedState: state,
-        sessionId: req.sessionID
+        cookies: req.headers.cookie ? 'present' : 'missing'
       });
       return res.status(400).json({ error: 'Invalid state parameter' });
     }
+    
+    logger.info('OAuth state validated from database', {
+      state,
+      addAccountMode: savedState.add_account_mode,
+      originalAccountId: savedState.original_account_id
+    });
 
-    // セッションのstateを削除（ワンタイム使用）
-    delete req.session.oauthState;
+    // アカウント追加モードの場合の処理
+    if (savedState.add_account_mode && savedState.original_account_id) {
+      // 既存のセッションを維持するため、originalAccountIdを設定
+      req.session.accountId = savedState.original_account_id;
+      logger.info('Account addition mode: maintaining original session', {
+        originalAccountId: savedState.original_account_id
+      });
+    }
 
     // 認証コードからトークンを取得してアカウントを作成/更新
     logger.info('Processing OAuth callback', { codeLength: code.length, state });
     const account = await oauthService.handleCallback(code);
     logger.info('OAuth callback processed successfully', { accountId: account.id, email: account.email });
 
-    // セッションにアカウントIDを保存
-    req.session.accountId = account.id;
-    logger.info('Session accountId set', { accountId: account.id });
+    // セッションにアカウントIDを保存（アカウント追加モードでない場合、または新規ログインの場合）
+    if (!savedState.add_account_mode) {
+      req.session.accountId = account.id;
+      logger.info('Session accountId set', { accountId: account.id });
+    }
 
     // セッションを明示的に保存（Vercel Serverless Functions対応）
     await new Promise<void>((resolve, reject) => {
@@ -134,7 +133,10 @@ authRouter.get('/google/callback', async (req: Request, res: Response) => {
           logger.error('Failed to save session after OAuth callback', { error: err });
           reject(err);
         } else {
-          logger.info('Session saved after OAuth callback', { accountId: account.id, sessionId: req.sessionID });
+          logger.info('Session saved after OAuth callback', { 
+            accountId: savedState.add_account_mode ? savedState.original_account_id : account.id, 
+            sessionId: req.sessionID 
+          });
           resolve();
         }
       });

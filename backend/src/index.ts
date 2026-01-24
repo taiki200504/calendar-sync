@@ -34,6 +34,9 @@ try {
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Trust proxy (Vercel Serverless Functions用、ローカル開発でも設定)
+app.set('trust proxy', 1);
+
 // Middleware
 app.use(helmet());
 app.use(cors({
@@ -71,12 +74,13 @@ const sessionConfig: session.SessionOptions = {
   resave: false,
   saveUninitialized: false,
   name: 'connect.sid', // セッションクッキー名を明示的に設定
+  proxy: true, // Vercel用: プロキシ経由のリクエストを信頼
   cookie: {
-    secure: process.env.NODE_ENV === 'production', // 本番環境ではHTTPS必須
+    secure: process.env.NODE_ENV === 'production', // 本番環境ではHTTPS必須（sameSite: 'none'の場合は必須）
     httpOnly: true,
     maxAge: 24 * 60 * 60 * 1000, // 24 hours
     sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', // クロスオリジン対応
-    domain: process.env.NODE_ENV === 'production' ? undefined : undefined // 開発環境ではドメインを指定しない
+    domain: undefined // ドメインを指定しない（すべてのサブドメインで動作）
   }
 };
 
