@@ -28,12 +28,16 @@ const consoleFormat = winston.format.combine(
   })
 );
 
+// Vercel Serverless Functionsかどうかを判定
+const isVercel = !!process.env.VERCEL || !!process.env.VERCEL_ENV;
+
 // ロガーインスタンスの作成
-export const logger = winston.createLogger({
-  level: logLevel,
-  format: customFormat,
-  defaultMeta: { service: 'calendar-sync-backend' },
-  transports: [
+const transports: winston.transport[] = [];
+
+// Vercel環境ではファイルトランスポートを使用しない（ファイルシステムへの書き込みができない）
+if (!isVercel) {
+  // ローカル環境やDocker環境ではファイルに保存
+  transports.push(
     // エラーログをファイルに保存
     new winston.transports.File({
       filename: 'logs/error.log',
@@ -45,32 +49,38 @@ export const logger = winston.createLogger({
       filename: 'logs/combined.log',
       format: customFormat
     })
-  ],
-  // 未処理の例外とリジェクトをキャッチ
-  exceptionHandlers: [
-    new winston.transports.File({ filename: 'logs/exceptions.log' })
-  ],
-  rejectionHandlers: [
-    new winston.transports.File({ filename: 'logs/rejections.log' })
-  ]
-});
-
-// 開発環境ではコンソールにも出力
-if (process.env.NODE_ENV !== 'production') {
-  logger.add(
-    new winston.transports.Console({
-      format: consoleFormat
-    })
   );
 }
 
-// 本番環境でもコンソールに出力（Docker等でログを収集する場合）
-if (process.env.NODE_ENV === 'production' && process.env.ENABLE_CONSOLE_LOG === 'true') {
-  logger.add(
+// コンソールトランスポートを追加（すべての環境で使用）
+if (process.env.NODE_ENV !== 'production' || isVercel) {
+  // 開発環境またはVercel環境ではコンソールに出力
+  transports.push(
+    new winston.transports.Console({
+      format: isVercel ? customFormat : consoleFormat
+    })
+  );
+} else if (process.env.ENABLE_CONSOLE_LOG === 'true') {
+  // 本番環境でコンソールログが有効な場合
+  transports.push(
     new winston.transports.Console({
       format: customFormat
     })
   );
 }
+
+export const logger = winston.createLogger({
+  level: logLevel,
+  format: customFormat,
+  defaultMeta: { service: 'calendar-sync-backend' },
+  transports: transports,
+  // 未処理の例外とリジェクトをキャッチ
+  exceptionHandlers: isVercel
+    ? [new winston.transports.Console({ format: customFormat })]
+    : [new winston.transports.File({ filename: 'logs/exceptions.log' })],
+  rejectionHandlers: isVercel
+    ? [new winston.transports.Console({ format: customFormat })]
+    : [new winston.transports.File({ filename: 'logs/rejections.log' })]
+});
 
 export default logger;
