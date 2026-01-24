@@ -58,6 +58,9 @@ case $DEPLOY_METHOD in
     echo "1. 変更をコミットしてプッシュ"
     echo "2. Vercelが自動的にデプロイを開始"
     echo ""
+    echo -e "${RED}⚠️  重要: Git push後、vercel --prod を手動で実行しないでください！${NC}"
+    echo "   Git pushだけでVercelが自動的にデプロイします。"
+    echo ""
     read -p "コミットメッセージを入力してください: " commit_message
     if [ -z "$commit_message" ]; then
       commit_message="Update: $(date '+%Y-%m-%d %H:%M:%S')"
@@ -71,8 +74,10 @@ case $DEPLOY_METHOD in
     echo "デプロイ状況を確認:"
     echo "  https://vercel.com/dashboard"
     echo ""
-    echo "⚠️  注意: vercel --prod を手動で実行する必要はありません。"
-    echo "   Git pushだけで自動的にデプロイされます。"
+    echo -e "${YELLOW}📌 注意事項:${NC}"
+    echo "  - Git pushだけで自動的にデプロイされます"
+    echo "  - vercel --prod を手動で実行すると重複デプロイになります"
+    echo "  - デプロイ状況はVercelダッシュボードで確認できます"
     ;;
 esac
 
