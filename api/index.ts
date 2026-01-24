@@ -3,6 +3,9 @@ import dotenv from 'dotenv';
 import cors from 'cors';
 import helmet from 'helmet';
 import session from 'express-session';
+// @ts-ignore - connect-redis v6 doesn't have proper TypeScript definitions
+import connectRedis from 'connect-redis';
+import Redis from 'ioredis';
 import { errorHandler } from '../backend/src/middleware/errorHandler';
 import { authRouter } from '../backend/src/controllers/auth.controller';
 import { accountRouter } from '../backend/src/controllers/account.controller';
@@ -28,10 +31,30 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Session management (Vercel Serverless Functions用に調整)
-// 注意: Serverless Functionsではメモリベースのセッションストアは推奨されません
-// 本番環境では外部ストア（Redis等）を使用してください
-app.use(session({
+// Redis client for session store
+const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
+let redisClient: Redis | null = null;
+
+try {
+  redisClient = new Redis(redisUrl, {
+    maxRetriesPerRequest: null,
+    enableReadyCheck: false,
+    lazyConnect: true
+  });
+
+  redisClient.on('error', (err) => {
+    logger.error('Redis Client Error', { error: err });
+  });
+
+  redisClient.on('connect', () => {
+    logger.info('Redis Client Connected');
+  });
+} catch (error) {
+  logger.error('Failed to create Redis client', { error });
+}
+
+// Session management with Redis store
+const sessionConfig: session.SessionOptions = {
   secret: process.env.SESSION_SECRET || 'your-session-secret-key-change-this-in-production',
   resave: false,
   saveUninitialized: false,
@@ -39,10 +62,25 @@ app.use(session({
   cookie: {
     secure: process.env.NODE_ENV === 'production',
     httpOnly: true,
+    maxAge: 24 * 60 * 60 * 1000, // 24 hours
     sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-    maxAge: 24 * 60 * 60 * 1000 // 24時間
+    domain: process.env.NODE_ENV === 'production' ? undefined : undefined
   }
-}));
+};
+
+// Redisストアが利用可能な場合は使用、そうでない場合はメモリストア（開発環境用）
+if (redisClient) {
+  const RedisStore = connectRedis(session);
+  sessionConfig.store = new RedisStore({
+    client: redisClient as any, // ioredis v5との型互換性のため
+    prefix: 'sess:'
+  });
+  logger.info('Session store: Redis');
+} else {
+  logger.warn('Session store: Memory (Redis not available)');
+}
+
+app.use(session(sessionConfig));
 
 // Health check
 app.get('/health', (_req, res) => {
