@@ -8,6 +8,7 @@ import { db } from '../utils/database';
 import { v4 as uuidv4 } from 'uuid';
 import { NotFoundError, ValidationError } from '../utils/errors';
 import { logger } from '../utils/logger';
+import { propagationService } from './propagation.service';
 
 class SyncService {
   /**
@@ -135,7 +136,7 @@ class SyncService {
 
     // e. EventLink更新
     const syncOpId = uuidv4();
-    await eventLinkModel.upsert({
+    const updatedEventLink = await eventLinkModel.upsert({
       canonical_event_id: canonicalEvent.id,
       account_id: calendar.account_id,
       calendar_id: calendar.id,
@@ -147,7 +148,18 @@ class SyncService {
       origin_account_id: calendar.account_id
     });
 
-    // f. 伝播はスキップ（Phase 3で実装）
+    // f. 伝播
+    const canPropagate =
+      calendar.sync_enabled && calendar.sync_direction !== 'readonly';
+
+    if (canPropagate) {
+      await propagationService.propagateEvent(
+        canonicalEvent.id,
+        updatedEventLink.id,
+        syncOpId
+      );
+    }
+
     logger.debug(`Upserted event ${googleEvent.id} -> canonical ${canonicalEvent.id}`, {
       eventId: googleEvent.id,
       canonicalId: canonicalEvent.id

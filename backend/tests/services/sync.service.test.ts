@@ -5,6 +5,7 @@ import { canonicalEventModel } from '../../src/models/canonical-event.model';
 import { eventLinkModel } from '../../src/models/event-link.model';
 import { db } from '../../src/utils/database';
 import { NotFoundError, ValidationError } from '../../src/utils/errors';
+import { propagationService } from '../../src/services/propagation.service';
 
 // モック設定
 jest.mock('../../src/models/calendarModel');
@@ -12,6 +13,10 @@ jest.mock('../../src/services/google-calendar.service');
 jest.mock('../../src/models/canonical-event.model');
 jest.mock('../../src/models/event-link.model');
 jest.mock('../../src/utils/database');
+jest.mock('../../src/services/propagation.service');
+jest.mock('uuid', () => ({
+  v4: jest.fn(() => 'mock-uuid-v4')
+}));
 jest.mock('../../src/utils/event-hash', () => ({
   computeEventHash: jest.fn().mockReturnValue('test-hash'),
   EventLink: {}
@@ -27,8 +32,14 @@ describe('SyncService', () => {
     id: mockCalendarId,
     account_id: mockAccountId,
     gcal_calendar_id: 'gcal-calendar-id',
+    name: 'Test Calendar',
+    role: 'owner',
     sync_enabled: true,
-    last_sync_cursor: null
+    sync_direction: 'bidirectional',
+    privacy_mode: 'detail',
+    last_sync_cursor: null,
+    created_at: new Date(),
+    updated_at: new Date()
   };
 
   const mockGoogleEvent = {
@@ -111,7 +122,7 @@ describe('SyncService', () => {
       const eventWithoutId = { ...mockGoogleEvent, id: undefined };
 
       await expect(
-        calendarSyncService.upsertEvent(eventWithoutId as typeof mockGoogleEvent, mockCalendar)
+        calendarSyncService.upsertEvent(eventWithoutId as any, mockCalendar)
       ).rejects.toThrow(ValidationError);
     });
 
@@ -131,6 +142,151 @@ describe('SyncService', () => {
       await calendarSyncService.upsertEvent(mockGoogleEvent, mockCalendar);
 
       expect(canonicalEventModel.update).not.toHaveBeenCalled();
+    });
+
+    it('should propagate event when sync is enabled and not readonly', async () => {
+      const mockEventLink = {
+        id: 'link-id',
+        canonical_event_id: mockCanonicalId,
+        account_id: mockAccountId,
+        calendar_id: mockCalendarId,
+        content_hash: 'old-hash',
+        last_synced_at: new Date()
+      };
+
+      const mockUpdatedEventLink = {
+        ...mockEventLink,
+        id: 'updated-link-id'
+      };
+
+      (canonicalEventModel.findById as jest.Mock).mockResolvedValue({
+        id: mockCanonicalId,
+        title: 'Test Event',
+        start_at: new Date('2024-01-01T10:00:00Z'),
+        end_at: new Date('2024-01-01T11:00:00Z')
+      });
+      (eventLinkModel.findByAccountIdAndGcalEventId as jest.Mock).mockResolvedValue(mockEventLink);
+      (canonicalEventModel.update as jest.Mock).mockResolvedValue({});
+      (eventLinkModel.upsert as jest.Mock).mockResolvedValue(mockUpdatedEventLink);
+      (propagationService.propagateEvent as jest.Mock).mockResolvedValue(undefined);
+
+      await calendarSyncService.upsertEvent(mockGoogleEvent, mockCalendar);
+
+      expect(propagationService.propagateEvent).toHaveBeenCalledWith(
+        mockCanonicalId,
+        mockUpdatedEventLink.id,
+        expect.any(String) // syncOpId
+      );
+    });
+
+    it('should not propagate event when sync_direction is readonly', async () => {
+      const readonlyCalendar = {
+        ...mockCalendar,
+        sync_direction: 'readonly'
+      };
+
+      const mockEventLink = {
+        id: 'link-id',
+        canonical_event_id: mockCanonicalId,
+        account_id: mockAccountId,
+        calendar_id: mockCalendarId,
+        content_hash: 'old-hash',
+        last_synced_at: new Date()
+      };
+
+      const mockUpdatedEventLink = {
+        ...mockEventLink,
+        id: 'updated-link-id'
+      };
+
+      (canonicalEventModel.findById as jest.Mock).mockResolvedValue({
+        id: mockCanonicalId,
+        title: 'Test Event',
+        start_at: new Date('2024-01-01T10:00:00Z'),
+        end_at: new Date('2024-01-01T11:00:00Z')
+      });
+      (eventLinkModel.findByAccountIdAndGcalEventId as jest.Mock).mockResolvedValue(mockEventLink);
+      (canonicalEventModel.update as jest.Mock).mockResolvedValue({});
+      (eventLinkModel.upsert as jest.Mock).mockResolvedValue(mockUpdatedEventLink);
+
+      await calendarSyncService.upsertEvent(mockGoogleEvent, readonlyCalendar);
+
+      expect(propagationService.propagateEvent).not.toHaveBeenCalled();
+    });
+
+    it('should not propagate event when sync is disabled', async () => {
+      const disabledCalendar = {
+        ...mockCalendar,
+        sync_enabled: false
+      };
+
+      const mockEventLink = {
+        id: 'link-id',
+        canonical_event_id: mockCanonicalId,
+        account_id: mockAccountId,
+        calendar_id: mockCalendarId,
+        content_hash: 'old-hash',
+        last_synced_at: new Date()
+      };
+
+      const mockUpdatedEventLink = {
+        ...mockEventLink,
+        id: 'updated-link-id'
+      };
+
+      (canonicalEventModel.findById as jest.Mock).mockResolvedValue({
+        id: mockCanonicalId,
+        title: 'Test Event',
+        start_at: new Date('2024-01-01T10:00:00Z'),
+        end_at: new Date('2024-01-01T11:00:00Z')
+      });
+      (eventLinkModel.findByAccountIdAndGcalEventId as jest.Mock).mockResolvedValue(mockEventLink);
+      (canonicalEventModel.update as jest.Mock).mockResolvedValue({});
+      (eventLinkModel.upsert as jest.Mock).mockResolvedValue(mockUpdatedEventLink);
+
+      await calendarSyncService.upsertEvent(mockGoogleEvent, disabledCalendar);
+
+      expect(propagationService.propagateEvent).not.toHaveBeenCalled();
+    });
+
+    it('should propagate event when sync_direction is writeonly', async () => {
+      const writeonlyCalendar = {
+        ...mockCalendar,
+        sync_direction: 'writeonly'
+      };
+
+      const mockEventLink = {
+        id: 'link-id',
+        canonical_event_id: mockCanonicalId,
+        account_id: mockAccountId,
+        calendar_id: mockCalendarId,
+        content_hash: 'old-hash',
+        last_synced_at: new Date()
+      };
+
+      const mockUpdatedEventLink = {
+        ...mockEventLink,
+        id: 'updated-link-id'
+      };
+
+      (canonicalEventModel.findById as jest.Mock).mockResolvedValue({
+        id: mockCanonicalId,
+        title: 'Test Event',
+        start_at: new Date('2024-01-01T10:00:00Z'),
+        end_at: new Date('2024-01-01T11:00:00Z')
+      });
+      (eventLinkModel.findByAccountIdAndGcalEventId as jest.Mock).mockResolvedValue(mockEventLink);
+      (canonicalEventModel.update as jest.Mock).mockResolvedValue({});
+      (eventLinkModel.upsert as jest.Mock).mockResolvedValue(mockUpdatedEventLink);
+      (propagationService.propagateEvent as jest.Mock).mockResolvedValue(undefined);
+
+      await calendarSyncService.upsertEvent(mockGoogleEvent, writeonlyCalendar);
+
+      expect(propagationService.propagateEvent).toHaveBeenCalledWith(
+        mockCanonicalId,
+        mockUpdatedEventLink.id,
+        expect.any(String) // syncOpId
+      );
     });
   });
 
