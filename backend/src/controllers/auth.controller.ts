@@ -38,6 +38,19 @@ authRouter.get('/google', async (req: Request, res: Response) => {
       req.session.originalAccountId = req.session.accountId;
     }
     
+    // セッションを明示的に保存（Vercel Serverless Functions対応）
+    await new Promise<void>((resolve, reject) => {
+      req.session.save((err) => {
+        if (err) {
+          logger.error('Failed to save session', { error: err });
+          reject(err);
+        } else {
+          logger.info('Session saved', { state, sessionId: req.sessionID });
+          resolve();
+        }
+      });
+    });
+    
     // OAuth認証URLを生成
     const authUrl = oauthService.getAuthUrl(state);
     
@@ -83,7 +96,22 @@ authRouter.get('/google/callback', async (req: Request, res: Response) => {
     }
 
     const sessionState = req.session.oauthState;
+    
+    // デバッグ用ログ
+    logger.info('Session state check', {
+      hasSession: !!req.session,
+      sessionId: req.sessionID,
+      oauthState: req.session.oauthState,
+      receivedState: state,
+      match: req.session.oauthState === state
+    });
+    
     if (!sessionState || sessionState !== state) {
+      logger.error('Invalid state parameter', {
+        sessionState: sessionState || 'null',
+        receivedState: state,
+        sessionId: req.sessionID
+      });
       return res.status(400).json({ error: 'Invalid state parameter' });
     }
 
@@ -98,6 +126,19 @@ authRouter.get('/google/callback', async (req: Request, res: Response) => {
     // セッションにアカウントIDを保存
     req.session.accountId = account.id;
     logger.info('Session accountId set', { accountId: account.id });
+
+    // セッションを明示的に保存（Vercel Serverless Functions対応）
+    await new Promise<void>((resolve, reject) => {
+      req.session.save((err) => {
+        if (err) {
+          logger.error('Failed to save session after OAuth callback', { error: err });
+          reject(err);
+        } else {
+          logger.info('Session saved after OAuth callback', { accountId: account.id, sessionId: req.sessionID });
+          resolve();
+        }
+      });
+    });
 
     // フロントエンドにリダイレクト
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';

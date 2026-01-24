@@ -1,75 +1,80 @@
 #!/bin/bash
 
-# デプロイスクリプト
-# 使用方法: ./scripts/deploy.sh [environment]
-# environment: production (デフォルト)
+# CalendarSync OS デプロイスクリプト
+# このスクリプトは、git pushとvercel deployの重複を防ぎます
 
 set -e
 
-ENVIRONMENT=${1:-production}
-ENV_FILE=".env.${ENVIRONMENT}"
+# 色の定義
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+NC='\033[0m' # No Color
 
-echo "🚀 CalendarSync OS デプロイスクリプト"
-echo "環境: ${ENVIRONMENT}"
+echo -e "${GREEN}🚀 CalendarSync OS デプロイスクリプト${NC}"
+echo "=================================="
 echo ""
 
-# 環境変数ファイルの確認
-if [ ! -f "$ENV_FILE" ]; then
-    echo "❌ エラー: ${ENV_FILE} が見つかりません"
-    echo "💡 ヒント: .env.production.example をコピーして ${ENV_FILE} を作成してください"
-    exit 1
-fi
+# 引数の確認
+DEPLOY_METHOD=${1:-"auto"}
 
-echo "✅ 環境変数ファイルを確認: ${ENV_FILE}"
+case $DEPLOY_METHOD in
+  "git")
+    echo -e "${YELLOW}📤 Git pushのみ（Vercelが自動デプロイ）${NC}"
+    echo ""
+    echo "変更をコミットしてプッシュします..."
+    git add -A
+    read -p "コミットメッセージを入力してください: " commit_message
+    if [ -z "$commit_message" ]; then
+      commit_message="Update: $(date '+%Y-%m-%d %H:%M:%S')"
+    fi
+    git commit -m "$commit_message"
+    git push
+    echo ""
+    echo -e "${GREEN}✅ Git push完了。Vercelが自動的にデプロイを開始します。${NC}"
+    echo ""
+    echo "デプロイ状況を確認:"
+    echo "  https://vercel.com/dashboard"
+    ;;
+  
+  "vercel")
+    echo -e "${YELLOW}🚀 Vercel CLI経由で直接デプロイ${NC}"
+    echo ""
+    echo "⚠️  注意: Git pushは行いません。"
+    echo ""
+    read -p "続行しますか？ (y/N): " confirm
+    if [[ ! $confirm =~ ^[Yy]$ ]]; then
+      echo "デプロイをキャンセルしました。"
+      exit 0
+    fi
+    vercel --prod --yes
+    echo ""
+    echo -e "${GREEN}✅ Vercelデプロイ完了${NC}"
+    ;;
+  
+  "auto"|*)
+    echo -e "${YELLOW}🔄 自動モード（推奨）${NC}"
+    echo ""
+    echo "1. 変更をコミットしてプッシュ"
+    echo "2. Vercelが自動的にデプロイを開始"
+    echo ""
+    read -p "コミットメッセージを入力してください: " commit_message
+    if [ -z "$commit_message" ]; then
+      commit_message="Update: $(date '+%Y-%m-%d %H:%M:%S')"
+    fi
+    git add -A
+    git commit -m "$commit_message"
+    git push
+    echo ""
+    echo -e "${GREEN}✅ Git push完了。Vercelが自動的にデプロイを開始します。${NC}"
+    echo ""
+    echo "デプロイ状況を確認:"
+    echo "  https://vercel.com/dashboard"
+    echo ""
+    echo "⚠️  注意: vercel --prod を手動で実行する必要はありません。"
+    echo "   Git pushだけで自動的にデプロイされます。"
+    ;;
+esac
 
-# Dockerの確認
-if ! command -v docker &> /dev/null; then
-    echo "❌ エラー: Dockerがインストールされていません"
-    exit 1
-fi
-
-if ! command -v docker-compose &> /dev/null; then
-    echo "❌ エラー: Docker Composeがインストールされていません"
-    exit 1
-fi
-
-echo "✅ DockerとDocker Composeを確認"
-
-# イメージをビルド
 echo ""
-echo "📦 Dockerイメージをビルド中..."
-docker-compose -f docker-compose.prod.yml --env-file "$ENV_FILE" build
-
-# サービスを起動
-echo ""
-echo "🚀 サービスを起動中..."
-docker-compose -f docker-compose.prod.yml --env-file "$ENV_FILE" up -d
-
-# データベースマイグレーション
-echo ""
-echo "🗄️  データベースマイグレーションを実行中..."
-sleep 10  # データベースとバックエンドが起動するまで待機
-docker-compose -f docker-compose.prod.yml --env-file "$ENV_FILE" exec -T backend npm run migrate:up || {
-    echo "⚠️  マイグレーションでエラーが発生しました。手動で実行してください:"
-    echo "   docker-compose -f docker-compose.prod.yml --env-file $ENV_FILE exec backend npm run migrate:up"
-}
-
-# ヘルスチェック
-echo ""
-echo "🏥 ヘルスチェック中..."
-sleep 5
-if curl -f http://localhost/health > /dev/null 2>&1; then
-    echo "✅ アプリケーションが正常に起動しました"
-else
-    echo "⚠️  ヘルスチェックに失敗しました。ログを確認してください:"
-    echo "   docker-compose -f docker-compose.prod.yml --env-file $ENV_FILE logs"
-fi
-
-echo ""
-echo "✅ デプロイが完了しました！"
-echo ""
-echo "📊 ログを確認:"
-echo "   docker-compose -f docker-compose.prod.yml --env-file $ENV_FILE logs -f"
-echo ""
-echo "🛑 停止:"
-echo "   docker-compose -f docker-compose.prod.yml --env-file $ENV_FILE down"
+echo -e "${GREEN}✨ 完了${NC}"
