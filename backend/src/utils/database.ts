@@ -106,7 +106,7 @@ function getPool(): Pool {
         }
       });
       
-      pool.on('error', (err) => {
+      pool.on('error', (err: any) => {
         try {
           logger.error('Unexpected error on idle client', { 
             error: err.message,
@@ -132,16 +132,17 @@ function getPool(): Pool {
       } catch {
         console.log('Database pool created');
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       // 初期化エラーの詳細をログに記録
+      const err = error as any;
       try {
         logger.error('Failed to create database pool', {
-          error: error.message,
-          code: error.code,
-          errno: error.errno,
-          syscall: error.syscall,
-          hostname: error.hostname,
-          port: error.port,
+          error: err.message || String(error),
+          code: err.code,
+          errno: err.errno,
+          syscall: err.syscall,
+          hostname: err.hostname,
+          port: err.port,
           databaseUrl: databaseUrl ? 'set' : 'not set',
           databaseUrlLength: databaseUrl?.length || 0
         });
@@ -168,16 +169,17 @@ export const db = {
   ): Promise<QueryResult<T>> => {
     try {
       const pool = getPool();
-      return pool.query<T>(text, params).catch((error: any) => {
+      return pool.query<T>(text, params).catch((error: unknown) => {
         // クエリ実行時のエラーを詳細にログに記録
+        const err = error as any;
         try {
           logger.error('Database query error', {
-            error: error.message,
-            code: error.code,
-            errno: error.errno,
-            syscall: error.syscall,
-            hostname: error.hostname,
-            port: error.port,
+            error: err.message || String(error),
+            code: err.code,
+            errno: err.errno,
+            syscall: err.syscall,
+            hostname: err.hostname,
+            port: err.port,
             query: typeof text === 'string' ? text.substring(0, 100) : 'QueryConfig',
             poolTotalCount: pool.totalCount,
             poolIdleCount: pool.idleCount,
@@ -188,16 +190,17 @@ export const db = {
         }
         throw error;
       });
-    } catch (error: any) {
+    } catch (error: unknown) {
       // プール取得時のエラーを詳細にログに記録
+      const err = error as any;
       try {
         logger.error('Failed to get database pool', {
-          error: error.message,
-          code: error.code,
-          errno: error.errno,
-          syscall: error.syscall,
-          hostname: error.hostname,
-          port: error.port
+          error: err.message || String(error),
+          code: err.code,
+          errno: err.errno,
+          syscall: err.syscall,
+          hostname: err.hostname,
+          port: err.port
         });
       } catch {
         console.error('Failed to get database pool:', error);
