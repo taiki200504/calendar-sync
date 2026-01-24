@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { oauthService } from '../services/oauth.service';
-import { oauthStateModel } from '../models/oauthStateModel';
+import { oauthStateModel, OAuthState } from '../models/oauthStateModel';
 import crypto from 'crypto';
 import { logger } from '../utils/logger';
 import { toAppError } from '../utils/errors';
@@ -37,13 +37,29 @@ authRouter.get('/google', async (req: Request, res: Response) => {
     }
     
     // stateをデータベースに保存（セッションクッキーに依存しない）
-    await oauthStateModel.create({
-      state,
-      addAccountMode: addAccount,
-      originalAccountId
-    });
-    
-    logger.info('OAuth state saved to database', { state, addAccount, originalAccountId });
+    try {
+      await oauthStateModel.create({
+        state,
+        addAccountMode: addAccount,
+        originalAccountId
+      });
+      logger.info('OAuth state saved to database', { state, addAccount, originalAccountId });
+    } catch (error: any) {
+      logger.error('Failed to save OAuth state to database', { 
+        error: error.message, 
+        code: error.code,
+        state 
+      });
+      // テーブルが存在しない場合のエラー
+      if (error.message?.includes('does not exist') || error.message?.includes('migrations')) {
+        return res.status(500).json({ 
+          error: 'Database migration required',
+          message: 'The oauth_states table does not exist. Please run database migrations.',
+          details: 'Run: cd backend && npm run migrate:up'
+        });
+      }
+      throw error;
+    }
     
     // OAuth認証URLを生成
     const authUrl = oauthService.getAuthUrl(state);

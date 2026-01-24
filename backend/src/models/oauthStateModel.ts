@@ -20,37 +20,53 @@ class OAuthStateModel {
     const expiresAt = new Date();
     expiresAt.setMinutes(expiresAt.getMinutes() + 10); // 10分後に期限切れ
 
-    const result = await db.query<OAuthState>(
-      `INSERT INTO oauth_states (state, expires_at, add_account_mode, original_account_id)
-       VALUES ($1, $2, $3, $4)
-       RETURNING *`,
-      [
-        data.state,
-        expiresAt,
-        data.addAccountMode || false,
-        data.originalAccountId || null
-      ]
-    );
-    return result.rows[0];
+    try {
+      const result = await db.query<OAuthState>(
+        `INSERT INTO oauth_states (state, expires_at, add_account_mode, original_account_id)
+         VALUES ($1, $2, $3, $4)
+         RETURNING *`,
+        [
+          data.state,
+          expiresAt,
+          data.addAccountMode || false,
+          data.originalAccountId || null
+        ]
+      );
+      return result.rows[0];
+    } catch (error: any) {
+      // テーブルが存在しない場合のエラーを検出
+      if (error.code === '42P01' || error.message?.includes('does not exist') || error.message?.includes('oauth_states')) {
+        throw new Error('oauth_states table does not exist. Please run database migrations: npm run migrate:up');
+      }
+      throw error;
+    }
   }
 
   /**
    * stateパラメータを取得して削除（ワンタイム使用）
    */
   async findAndDelete(state: string): Promise<OAuthState | null> {
-    // 期限切れのstateを削除
-    await db.query(
-      'DELETE FROM oauth_states WHERE expires_at < NOW()'
-    );
+    try {
+      // 期限切れのstateを削除
+      await db.query(
+        'DELETE FROM oauth_states WHERE expires_at < NOW()'
+      );
 
-    // stateを取得して削除
-    const result = await db.query<OAuthState>(
-      `DELETE FROM oauth_states 
-       WHERE state = $1 AND expires_at > NOW()
-       RETURNING *`,
-      [state]
-    );
-    return result.rows[0] || null;
+      // stateを取得して削除
+      const result = await db.query<OAuthState>(
+        `DELETE FROM oauth_states 
+         WHERE state = $1 AND expires_at > NOW()
+         RETURNING *`,
+        [state]
+      );
+      return result.rows[0] || null;
+    } catch (error: any) {
+      // テーブルが存在しない場合のエラーを検出
+      if (error.code === '42P01' || error.message?.includes('does not exist') || error.message?.includes('oauth_states')) {
+        throw new Error('oauth_states table does not exist. Please run database migrations: npm run migrate:up');
+      }
+      throw error;
+    }
   }
 
   /**
