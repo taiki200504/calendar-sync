@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import cors from 'cors';
 import helmet from 'helmet';
 import session from 'express-session';
+// @ts-ignore - connect-redis v6 doesn't have proper TypeScript definitions
 import connectRedis from 'connect-redis';
 import Redis from 'ioredis';
 import { errorHandler } from './middleware/errorHandler';
