@@ -71,7 +71,7 @@ class AccountModel {
     oauth_expires_at?: Date | null;
     workspace_flag?: boolean;
   }): Promise<Account> {
-    const { NotFoundError } = await import('../utils/errors');
+    const { NotFoundError } = await import('../utils/errors.js');
 
     // 更新するフィールドを構築
     const updateFields: string[] = [];

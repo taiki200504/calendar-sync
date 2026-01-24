@@ -134,7 +134,7 @@ authRouter.get('/me', async (req: Request, res: Response) => {
     }
 
     // アカウント情報を取得（トークンは返さない）
-    const { accountModel } = await import('../models/accountModel');
+    const { accountModel } = await import('../models/accountModel.js');
     const account = await accountModel.findById(accountId);
     
     if (!account) {
