@@ -10,15 +10,46 @@ const isSupabase = process.env.DATABASE_URL?.includes('supabase');
 // DATABASE_URLの検証（遅延初期化のため、ここではエラーを投げない）
 const databaseUrl = process.env.DATABASE_URL;
 
+// デバッグ用: 環境変数の状態をログに記録（パスワード部分は隠す）
+if (process.env.NODE_ENV === 'production' || process.env.VERCEL) {
+  try {
+    if (databaseUrl) {
+      // パスワード部分を隠す
+      const maskedUrl = databaseUrl.replace(/:([^:@]+)@/, ':***@');
+      logger.info('DATABASE_URL status', {
+        isSet: true,
+        hasSupabase: databaseUrl.includes('supabase'),
+        maskedUrl: maskedUrl,
+        length: databaseUrl.length,
+        vercel: !!process.env.VERCEL
+      });
+    } else {
+      logger.error('DATABASE_URL is NOT set in environment', {
+        allEnvKeys: Object.keys(process.env).filter(k => k.includes('DATABASE') || k.includes('DB')),
+        vercel: !!process.env.VERCEL,
+        nodeEnv: process.env.NODE_ENV
+      });
+    }
+  } catch (err) {
+    console.error('Failed to log DATABASE_URL status', err);
+  }
+}
+
 // 接続設定を構築する関数
 function createPool() {
   if (!databaseUrl) {
     const error = new Error('DATABASE_URL environment variable is required');
     // loggerが利用可能な場合のみログ出力
     try {
-      logger.error('DATABASE_URL is not set');
+      logger.error('DATABASE_URL is not set', {
+        allEnvKeys: Object.keys(process.env).filter(k => k.includes('DATABASE') || k.includes('DB')),
+        vercel: !!process.env.VERCEL,
+        nodeEnv: process.env.NODE_ENV
+      });
     } catch {
-      console.error('DATABASE_URL is not set');
+      console.error('DATABASE_URL is not set', {
+        allEnvKeys: Object.keys(process.env).filter(k => k.includes('DATABASE') || k.includes('DB'))
+      });
     }
     throw error;
   }

@@ -25,6 +25,15 @@ declare module 'express-session' {
  */
 authRouter.get('/google', async (req: Request, res: Response) => {
   try {
+    // デバッグ用: 環境変数の状態をログに記録
+    logger.info('OAuth request started', {
+      hasDatabaseUrl: !!process.env.DATABASE_URL,
+      databaseUrlLength: process.env.DATABASE_URL?.length || 0,
+      databaseUrlPrefix: process.env.DATABASE_URL?.substring(0, 30) || 'not set',
+      vercel: !!process.env.VERCEL,
+      nodeEnv: process.env.NODE_ENV
+    });
+    
     // CSRF対策のためのstateパラメータを生成
     const state = crypto.randomBytes(32).toString('hex');
     
@@ -49,7 +58,10 @@ authRouter.get('/google', async (req: Request, res: Response) => {
         error: error.message, 
         code: error.code,
         state,
-        databaseUrl: process.env.DATABASE_URL ? 'set' : 'not set'
+        databaseUrl: process.env.DATABASE_URL ? 'set' : 'not set',
+        databaseUrlLength: process.env.DATABASE_URL?.length || 0,
+        databaseUrlPrefix: process.env.DATABASE_URL?.substring(0, 50) || 'not set',
+        allEnvKeys: Object.keys(process.env).filter(k => k.includes('DATABASE') || k.includes('DB'))
       });
       
       // データベース接続エラー
