@@ -48,16 +48,35 @@ authRouter.get('/google', async (req: Request, res: Response) => {
       logger.error('Failed to save OAuth state to database', { 
         error: error.message, 
         code: error.code,
-        state 
+        state,
+        databaseUrl: process.env.DATABASE_URL ? 'set' : 'not set'
       });
+      
+      // データベース接続エラー
+      if (error.message?.includes('Database connection failed') || error.message?.includes('ENOTFOUND') || error.message?.includes('getaddrinfo')) {
+        return res.status(500).json({ 
+          error: 'Database connection failed',
+          message: error.message || 'Failed to connect to database',
+          details: 'Please check DATABASE_URL environment variable in Vercel dashboard. The database hostname cannot be resolved.',
+          troubleshooting: [
+            '1. Go to Vercel Dashboard → Project → Settings → Environment Variables',
+            '2. Check if DATABASE_URL is set correctly',
+            '3. Verify the Supabase database URL format: postgresql://postgres:password@db.project-id.supabase.co:5432/postgres',
+            '4. Ensure the Supabase project is active and accessible'
+          ]
+        });
+      }
+      
       // テーブルが存在しない場合のエラー
       if (error.message?.includes('does not exist') || error.message?.includes('migrations')) {
         return res.status(500).json({ 
           error: 'Database migration required',
           message: 'The oauth_states table does not exist. Please run database migrations.',
-          details: 'Run: cd backend && npm run migrate:up'
+          details: 'Run: cd backend && npm run migrate:up',
+          sqlFile: 'See MIGRATION_SQL.sql for manual SQL execution'
         });
       }
+      
       throw error;
     }
     

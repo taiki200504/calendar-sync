@@ -34,10 +34,15 @@ class OAuthStateModel {
       );
       return result.rows[0];
     } catch (error: any) {
+      // データベース接続エラー
+      if (error.code === 'ENOTFOUND' || error.message?.includes('getaddrinfo') || error.message?.includes('ENOTFOUND')) {
+        throw new Error(`Database connection failed: ${error.message}. Please check DATABASE_URL environment variable in Vercel.`);
+      }
       // テーブルが存在しない場合のエラーを検出
       if (error.code === '42P01' || error.message?.includes('does not exist') || error.message?.includes('oauth_states')) {
         throw new Error('oauth_states table does not exist. Please run database migrations: npm run migrate:up');
       }
+      // その他のデータベースエラー
       throw error;
     }
   }
@@ -61,10 +66,15 @@ class OAuthStateModel {
       );
       return result.rows[0] || null;
     } catch (error: any) {
+      // データベース接続エラー
+      if (error.code === 'ENOTFOUND' || error.message?.includes('getaddrinfo') || error.message?.includes('ENOTFOUND')) {
+        throw new Error(`Database connection failed: ${error.message}. Please check DATABASE_URL environment variable in Vercel.`);
+      }
       // テーブルが存在しない場合のエラーを検出
       if (error.code === '42P01' || error.message?.includes('does not exist') || error.message?.includes('oauth_states')) {
         throw new Error('oauth_states table does not exist. Please run database migrations: npm run migrate:up');
       }
+      // その他のデータベースエラー
       throw error;
     }
   }
