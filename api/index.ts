@@ -46,7 +46,15 @@ app.use(session({
 
 // Health check
 app.get('/health', (_req, res) => {
-  return res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  return res.json({ 
+    status: 'ok', 
+    timestamp: new Date().toISOString(),
+    env: {
+      hasDatabaseUrl: !!process.env.DATABASE_URL,
+      hasRedisUrl: !!process.env.REDIS_URL,
+      nodeEnv: process.env.NODE_ENV
+    }
+  });
 });
 
 // Routes
