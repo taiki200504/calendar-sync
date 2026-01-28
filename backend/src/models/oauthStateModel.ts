@@ -47,9 +47,12 @@ class OAuthStateModel {
         state: data.state
       });
       
-      // データベース接続エラー
+      // データベース接続エラー（Vercel から直接 DB ホストが名前解決できない場合）
       if (error.code === 'ENOTFOUND' || error.message?.includes('getaddrinfo') || error.message?.includes('ENOTFOUND')) {
-        throw new Error(`Database connection failed: ${error.message} (code: ${error.code}, hostname: ${error.hostname || 'unknown'}). Please check DATABASE_URL environment variable in Vercel and ensure the Supabase project is active.`);
+        throw new Error(
+          `Database connection failed: ${error.message}. ` +
+          'Use Supabase connection pooler: set DATABASE_URL to Transaction mode (port 6543) or Session mode (pooler.supabase.com) in Vercel. See POOLER_FIX_JA.md.'
+        );
       }
       // テーブルが存在しない場合のエラーを検出
       if (error.code === '42P01' || error.message?.includes('does not exist') || error.message?.includes('oauth_states')) {
@@ -81,7 +84,10 @@ class OAuthStateModel {
     } catch (error: any) {
       // データベース接続エラー
       if (error.code === 'ENOTFOUND' || error.message?.includes('getaddrinfo') || error.message?.includes('ENOTFOUND')) {
-        throw new Error(`Database connection failed: ${error.message}. Please check DATABASE_URL environment variable in Vercel.`);
+        throw new Error(
+          `Database connection failed: ${error.message}. ` +
+          'Use Supabase pooler URL (port 6543 or pooler.supabase.com) for DATABASE_URL in Vercel. See POOLER_FIX_JA.md.'
+        );
       }
       // テーブルが存在しない場合のエラーを検出
       if (error.code === '42P01' || error.message?.includes('does not exist') || error.message?.includes('oauth_states')) {

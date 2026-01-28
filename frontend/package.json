@@ -11,18 +11,19 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.91.1",
+    "@tanstack/react-query": "^5.17.9",
+    "@vitejs/plugin-react": "^4.2.1",
+    "autoprefixer": "^10.4.16",
+    "axios": "^1.6.2",
+    "date-fns": "^3.0.6",
+    "postcss": "^8.4.32",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^6.21.1",
-    "@tanstack/react-query": "^5.17.9",
-    "axios": "^1.6.2",
-    "date-fns": "^3.0.6",
-    "zustand": "^4.4.7",
-    "vite": "^5.0.8",
-    "@vitejs/plugin-react": "^4.2.1",
     "tailwindcss": "^3.4.0",
-    "postcss": "^8.4.32",
-    "autoprefixer": "^10.4.16"
+    "vite": "^5.0.8",
+    "zustand": "^4.4.7"
   },
   "devDependencies": {
     "@types/react": "^18.2.45",

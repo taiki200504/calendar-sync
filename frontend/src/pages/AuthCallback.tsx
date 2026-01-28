@@ -2,6 +2,9 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../hooks/useAuthStore';
 import api from '../services/api';
+import { supabase } from '../lib/supabase';
+
+const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
 export function AuthCallback() {
   const navigate = useNavigate();
@@ -10,7 +13,33 @@ export function AuthCallback() {
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        // URLパラメータから成功/失敗を確認
+        // 1) Supabase Auth からのリダイレクト: ハッシュにトークンが入っている（クライアントが復元するまで少し待つ）
+        if (window.location.hash) {
+          await new Promise(r => setTimeout(r, 100));
+        }
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.access_token) {
+          try {
+            const res = await fetch(`${API_BASE}/auth/supabase-session`, {
+              method: 'POST',
+              credentials: 'include',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ access_token: session.access_token }),
+            });
+            const data = await res.json();
+            if (res.ok && data.success) {
+              setAuthenticated(true);
+              navigate('/dashboard');
+              return;
+            }
+          } catch (e) {
+            console.error('Supabase session exchange failed:', e);
+          }
+          navigate('/');
+          return;
+        }
+
+        // 2) 従来のバックエンド OAuth コールバック (success=true)
         const urlParams = new URLSearchParams(window.location.search);
         const success = urlParams.get('success');
         const error = urlParams.get('error');
@@ -23,50 +52,25 @@ export function AuthCallback() {
 
         if (success === 'true') {
           const accountAdded = urlParams.get('accountAdded') === 'true';
-          
           if (accountAdded) {
-            // アカウント追加モード：ダッシュボードに戻るだけ
-            console.log('✅ Account added successfully');
-            // アカウント一覧を再取得するためにダッシュボードにリロード
             window.location.href = '/dashboard';
             return;
           }
 
-          // 通常のログインフロー - セッションが設定されているので、/api/auth/meで確認
-          // 少し待ってからセッションが確立されるのを待つ
           await new Promise(resolve => setTimeout(resolve, 500));
-          
           try {
-            console.log('🔄 Verifying authentication with /api/auth/me...');
-            // withCredentials: trueが設定されているので、セッションクッキーが自動的に送信される
             const response = await api.get('/auth/me');
-            console.log('✅ Authentication verified:', response.data);
-            
             if (response.data) {
               setAuthenticated(true);
-              console.log('✅ Navigating to dashboard...');
               navigate('/dashboard');
             } else {
-              console.error('❌ No user data received');
               navigate('/');
             }
-          } catch (err: any) {
-            console.error('❌ Failed to verify authentication:', err);
-            // エラーの詳細をログに出力
-            if (err.response) {
-              console.error('Error response:', err.response.data);
-              console.error('Error status:', err.response.status);
-              console.error('Error headers:', err.response.headers);
-            }
-            if (err.request) {
-              console.error('Request made but no response received');
-            }
-            console.error('Full error:', err);
+          } catch (err: unknown) {
+            console.error('Failed to verify authentication:', err);
             navigate('/');
           }
         } else {
-          // 認証失敗
-          console.log('❌ Authentication failed (success !== true)');
           navigate('/');
         }
       } catch (error) {

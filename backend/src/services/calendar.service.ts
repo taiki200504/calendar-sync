@@ -1,6 +1,6 @@
 import { calendarModel, Calendar, CalendarSettings } from '../models/calendarModel';
 import { accountModel } from '../models/accountModel';
-import { authService } from './authService';
+import { oauthService } from './oauth.service';
 import { google } from 'googleapis';
 
 class CalendarService {
@@ -14,17 +14,8 @@ class CalendarService {
       throw new Error('Account not found');
     }
 
-    if (!account.oauth_access_token) {
-      throw new Error('Account does not have access token');
-    }
-
-    // OAuth2クライアントを取得
-    const auth = authService.getOAuth2Client(
-      account.oauth_access_token,
-      account.oauth_refresh_token || undefined
-    );
-
-    // Google Calendar APIクライアントを取得
+    // oauthServiceを使用して認証済みクライアントを取得（自動リフレッシュ対応）
+    const auth = await oauthService.getAuthenticatedClient(accountId);
     const calendarApi = google.calendar({ version: 'v3', auth });
 
     // カレンダー一覧を取得

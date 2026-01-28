@@ -1,8 +1,7 @@
 import { google } from 'googleapis';
 import { watchModel, WatchChannel } from '../models/watch.model';
 import { calendarModel } from '../models/calendarModel';
-import { accountModel } from '../models/accountModel';
-import { authService } from './authService';
+import { oauthService } from './oauth.service';
 
 class WatchService {
   /**
@@ -17,21 +16,8 @@ class WatchService {
       throw new Error('Calendar not found');
     }
 
-    // アカウントを取得
-    const account = await accountModel.findById(calendar.account_id);
-    if (!account) {
-      throw new Error('Account not found');
-    }
-
-    if (!account.oauth_access_token) {
-      throw new Error('Account OAuth token not found');
-    }
-
-    // OAuth clientを取得
-    const auth = authService.getOAuth2Client(
-      account.oauth_access_token,
-      account.oauth_refresh_token || undefined
-    );
+    // oauthServiceを使用して認証済みクライアントを取得（自動リフレッシュ対応）
+    const auth = await oauthService.getAuthenticatedClient(calendar.account_id);
     const calendarApi = google.calendar({ version: 'v3', auth });
 
     // channelIdを生成（UUID）
@@ -113,21 +99,8 @@ class WatchService {
       throw new Error('Calendar not found');
     }
 
-    // アカウントを取得
-    const account = await accountModel.findById(calendar.account_id);
-    if (!account) {
-      throw new Error('Account not found');
-    }
-
-    if (!account.oauth_access_token) {
-      throw new Error('Account OAuth token not found');
-    }
-
-    // OAuth clientを取得
-    const auth = authService.getOAuth2Client(
-      account.oauth_access_token,
-      account.oauth_refresh_token || undefined
-    );
+    // oauthServiceを使用して認証済みクライアントを取得（自動リフレッシュ対応）
+    const auth = await oauthService.getAuthenticatedClient(calendar.account_id);
     const calendarApi = google.calendar({ version: 'v3', auth });
 
     try {

@@ -1,6 +1,5 @@
 import { google, calendar_v3 } from 'googleapis';
-import { authService } from './authService';
-import { accountModel } from '../models/accountModel';
+import { oauthService } from './oauth.service';
 import { calendarModel } from '../models/calendarModel';
 import { NotFoundError, AuthenticationError } from '../utils/errors';
 import { logger } from '../utils/logger';
@@ -20,26 +19,14 @@ class GoogleCalendarService {
     accountId: string,
     calendarId: string
   ): Promise<{ calendarApi: calendar_v3.Calendar; calendar: Awaited<ReturnType<typeof calendarModel.findById>> }> {
-    const account = await accountModel.findById(accountId);
-    if (!account) {
-      throw new NotFoundError('Account', accountId);
-    }
-
-    if (!account.oauth_access_token) {
-      throw new AuthenticationError(`Account ${accountId} has no access token`);
-    }
-
     // calendarIdがUUIDの場合、calendarsテーブルからgcal_calendar_idを取得
     const calendar = await calendarModel.findById(calendarId);
     if (!calendar) {
       throw new NotFoundError('Calendar', calendarId);
     }
 
-    const auth = authService.getOAuth2Client(
-      account.oauth_access_token,
-      account.oauth_refresh_token || undefined
-    );
-
+    // oauthServiceを使用して認証済みクライアントを取得（自動リフレッシュ対応）
+    const auth = await oauthService.getAuthenticatedClient(accountId);
     const calendarApi = google.calendar({ version: 'v3', auth });
 
     return { calendarApi, calendar };

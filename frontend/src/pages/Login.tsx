@@ -1,7 +1,18 @@
+import { supabase } from '../lib/supabase';
+
 export function Login() {
-  const handleGoogleLogin = () => {
-    // /api/auth/google にリダイレクト
-    window.location.href = '/api/auth/google';
+  const handleGoogleLogin = async () => {
+    const redirectTo = `${window.location.origin}/auth/callback`;
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo },
+    });
+    if (error) {
+      console.error('Supabase signIn error:', error);
+      window.location.href = '/api/auth/google'; // フォールバック: 従来のバックエンドOAuth
+      return;
+    }
+    // signInWithOAuth は redirectTo にリダイレクトするため、ここには通常戻ってこない
   };
 
   return (

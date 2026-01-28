@@ -1,8 +1,6 @@
 import { Worker, Job, ConnectionOptions } from 'bullmq';
 import { calendarModel } from '../models/calendarModel';
-import { accountModel } from '../models/accountModel';
-import { authService } from '../services/authService';
-import { google } from 'googleapis';
+import { oauthService } from '../services/oauth.service';
 
 const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
 const connection: ConnectionOptions = {
@@ -24,23 +22,9 @@ export const calendarSyncWorker = new Worker(
       throw new Error(`Calendar ${calendarId} not found`);
     }
 
-    // アカウントを取得
-    const account = await accountModel.findById(calendar.account_id);
-    if (!account) {
-      throw new Error(`Account ${calendar.account_id} not found`);
-    }
-
-    if (!account.oauth_access_token) {
-      throw new Error('Account OAuth token not found');
-    }
-
-    // OAuth clientを取得
-    const auth = authService.getOAuth2Client(
-      account.oauth_access_token,
-      account.oauth_refresh_token || undefined
-    );
-    const calendarApi = google.calendar({ version: 'v3', auth });
-    // calendarApiは未使用だが、将来的に使用する可能性があるため保持
+    // oauthServiceを使用して認証済みクライアントを取得（自動リフレッシュ対応）
+    // 注: 現在は未使用だが、将来的に使用する可能性があるため保持
+    await oauthService.getAuthenticatedClient(calendar.account_id);
 
     // 実際の同期処理を実行
     const { syncService } = await import('../services/sync.service');

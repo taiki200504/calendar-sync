@@ -1,5 +1,5 @@
 import { google } from 'googleapis';
-import { authService } from './authService';
+import { oauthService } from './oauth.service';
 import { calendarModel } from '../models/calendarModel';
 
 // 型定義
@@ -54,16 +54,8 @@ class FreeBusyService {
       throw new Error('No valid calendars found');
     }
 
-    // アカウントのトークンを取得
-    const account = await calendarModel.getAccountWithTokens(accountId);
-    if (!account || !account.oauth_access_token) {
-      throw new Error('Account not found or no access token');
-    }
-
-    const auth = authService.getOAuth2Client(
-      account.oauth_access_token,
-      account.oauth_refresh_token || undefined
-    );
+    // oauthServiceを使用して認証済みクライアントを取得（自動リフレッシュ対応）
+    const auth = await oauthService.getAuthenticatedClient(accountId);
     const calendarApi = google.calendar({ version: 'v3', auth });
 
     // b. Google FreeBusy APIでbusy区間を取得

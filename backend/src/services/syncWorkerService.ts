@@ -1,7 +1,5 @@
 import { calendarModel } from '../models/calendarModel';
 import { syncModel } from '../models/syncModel';
-import { authService } from './authService';
-import { google } from 'googleapis';
 
 class SyncWorkerService {
   async processSync(
