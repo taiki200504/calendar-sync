@@ -1,5 +1,5 @@
 import { Router, Request, Response } from 'express';
-import jwt from 'jsonwebtoken';
+import * as jwt from 'jsonwebtoken';
 import { oauthService } from '../services/oauth.service';
 import { oauthStateModel, OAuthState } from '../models/oauthStateModel';
 import { accountModel, Account } from '../models/accountModel.js';
@@ -325,7 +325,7 @@ authRouter.post('/supabase-session', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Email not found in token' });
     }
 
-    let account: Account;
+    let account: Account | null;
     try {
       account = await accountModel.findBySupabaseUserId(supabaseUserId);
       if (!account) {
@@ -339,6 +339,10 @@ authRouter.post('/supabase-session', async (req: Request, res: Response) => {
             supabase_user_id: supabaseUserId,
           });
         }
+      }
+      
+      if (!account) {
+        return res.status(500).json({ error: 'Failed to create or find account' });
       }
     } catch (dbErr: unknown) {
       const e = dbErr as Error & { code?: string };

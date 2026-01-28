@@ -4,6 +4,7 @@ export interface Account {
   id: string; // uuid
   email: string;
   provider: string;
+  supabase_user_id: string | null;
   oauth_access_token: string | null;
   oauth_refresh_token: string | null;
   oauth_expires_at: Date | null;
@@ -29,6 +30,14 @@ class AccountModel {
     return result.rows[0] || null;
   }
 
+  async findBySupabaseUserId(supabaseUserId: string): Promise<Account | null> {
+    const result = await db.query<Account>(
+      'SELECT * FROM accounts WHERE supabase_user_id = $1',
+      [supabaseUserId]
+    );
+    return result.rows[0] || null;
+  }
+
   async findByUserId(_userId: number): Promise<Account[]> {
     // ユーザーIDからアカウントを取得するロジック
     // 現在の認証システムではuserIdがJWTに含まれているが、
@@ -44,18 +53,20 @@ class AccountModel {
   async create(accountData: {
     email: string;
     provider?: string;
+    supabase_user_id?: string | null;
     oauth_access_token?: string;
     oauth_refresh_token?: string;
     oauth_expires_at?: Date | null;
     workspace_flag?: boolean;
   }): Promise<Account> {
     const result = await db.query<Account>(
-      `INSERT INTO accounts (email, provider, oauth_access_token, oauth_refresh_token, oauth_expires_at, workspace_flag)
-       VALUES ($1, $2, $3, $4, $5, $6)
+      `INSERT INTO accounts (email, provider, supabase_user_id, oauth_access_token, oauth_refresh_token, oauth_expires_at, workspace_flag)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING *`,
       [
         accountData.email,
         accountData.provider || 'google',
+        accountData.supabase_user_id ?? null,
         accountData.oauth_access_token || null,
         accountData.oauth_refresh_token || null,
         accountData.oauth_expires_at || null,
@@ -66,6 +77,7 @@ class AccountModel {
   }
 
   async update(id: string, updates: {
+    supabase_user_id?: string | null;
     oauth_access_token?: string;
     oauth_refresh_token?: string;
     oauth_expires_at?: Date | null;
@@ -78,6 +90,11 @@ class AccountModel {
     const values: any[] = [];
     let paramIndex = 1;
 
+    if (updates.supabase_user_id !== undefined) {
+      updateFields.push(`supabase_user_id = $${paramIndex}`);
+      values.push(updates.supabase_user_id);
+      paramIndex++;
+    }
     if (updates.oauth_access_token !== undefined) {
       updateFields.push(`oauth_access_token = $${paramIndex}`);
       values.push(updates.oauth_access_token);
@@ -154,6 +171,7 @@ class AccountModel {
   async upsert(accountData: {
     email: string;
     provider?: string;
+    supabase_user_id?: string | null;
     oauth_access_token?: string;
     oauth_refresh_token?: string;
     oauth_expires_at?: Date | null;
@@ -165,6 +183,7 @@ class AccountModel {
     if (existing) {
       // 既存のアカウントを更新
       return await this.update(existing.id, {
+        supabase_user_id: accountData.supabase_user_id,
         oauth_access_token: accountData.oauth_access_token,
         oauth_refresh_token: accountData.oauth_refresh_token,
         oauth_expires_at: accountData.oauth_expires_at,
