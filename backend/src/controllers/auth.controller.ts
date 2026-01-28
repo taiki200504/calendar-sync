@@ -7,7 +7,7 @@ import crypto from 'crypto';
 import { logger } from '../utils/logger';
 import { toAppError } from '../utils/errors';
 
-/** Supabase JWT payload (access_token) */
+/** Supabase JWT payload (access_token) - simplified shape we care about */
 interface SupabaseJwtPayload {
   sub: string;
   email?: string;
@@ -301,19 +301,62 @@ authRouter.post('/supabase-session', async (req: Request, res: Response) => {
     if (!access_token || typeof access_token !== 'string') {
       return res.status(400).json({ error: 'access_token is required' });
     }
+    
+    // Supabase Auth v2 では JWT Signing Keys (非対称鍵) が使われるため、
+    // サーバー側でシークレットを使って verify するのではなく、
+    // Supabase の Auth API に問い合わせてトークンを検証する。
+    const supabaseUrl =
+      process.env.VITE_SUPABASE_URL ||
+      process.env.SUPABASE_URL;
+    const supabaseAnonKey =
+      process.env.VITE_SUPABASE_ANON_KEY ||
+      process.env.SUPABASE_ANON_KEY;
 
-    const secret = process.env.SUPABASE_JWT_SECRET;
-    if (!secret) {
-      logger.error('SUPABASE_JWT_SECRET is not set');
+    if (!supabaseUrl || !supabaseAnonKey) {
+      logger.error('Supabase URL or anon key is not set', {
+        hasUrl: !!supabaseUrl,
+        hasAnonKey: !!supabaseAnonKey
+      });
       return res.status(500).json({ error: 'Server configuration error' });
     }
 
     let payload: SupabaseJwtPayload;
     try {
-      payload = jwt.verify(access_token, secret) as SupabaseJwtPayload;
+      const baseUrl = supabaseUrl.replace(/\/$/, '');
+      const resp = await fetch(`${baseUrl}/auth/v1/user`, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${access_token}`,
+          apikey: supabaseAnonKey
+        }
+      });
+
+      if (!resp.ok) {
+        const text = await resp.text().catch(() => '');
+        logger.warn('Supabase user fetch failed', {
+          status: resp.status,
+          statusText: resp.statusText,
+          body: text
+        });
+        return res.status(401).json({ error: 'Invalid or expired token' });
+      }
+
+      const data = await resp.json() as {
+        id: string;
+        email?: string;
+        user_metadata?: { email?: string };
+      };
+
+      payload = {
+        sub: data.id,
+        email: data.email,
+        user_metadata: data.user_metadata
+      };
     } catch (err) {
-      logger.warn('Invalid Supabase JWT', { error: (err as Error).message });
-      return res.status(401).json({ error: 'Invalid or expired token' });
+      logger.error('Failed to verify Supabase JWT via Auth API', {
+        error: (err as Error).message
+      });
+      return res.status(500).json({ error: 'Failed to verify Supabase token' });
     }
 
     const supabaseUserId = payload.sub;
