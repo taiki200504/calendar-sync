@@ -8,6 +8,8 @@ class OAuthService {
   private oauth2Client: OAuth2Client;
   private encryptionKey: string;
   private algorithm = 'aes-256-cbc';
+  // トークンリフレッシュの同時実行を防ぐためのロック
+  private refreshTokenLocks = new Map<string, Promise<void>>();
 
   constructor() {
     try {
@@ -143,6 +145,16 @@ class OAuthService {
         scope: tokens.scope
       });
 
+      // リフレッシュトークンが取得できていない場合の警告
+      if (!tokens.refresh_token) {
+        console.warn('⚠️  WARNING: Refresh token was not obtained. This may cause authentication issues when the access token expires.');
+        console.warn('⚠️  Possible reasons:');
+        console.warn('   1. User has already granted permission (Google only issues refresh token on first consent)');
+        console.warn('   2. OAuth consent screen is not properly configured');
+        console.warn('   3. prompt: "consent" parameter may not be working as expected');
+        console.warn('⚠️  User will need to re-authenticate when access token expires.');
+      }
+
       // トークンのスコープを確認
       if (tokens.scope) {
         console.log('Token scopes:', tokens.scope);
@@ -240,54 +252,78 @@ class OAuthService {
 
   /**
    * リフレッシュトークンで新しいアクセストークンを取得し、DB更新
+   * 同時実行を防ぐためのロック機構付き
    */
   async refreshToken(accountId: string): Promise<void> {
-    const account = await accountModel.findById(accountId);
-    if (!account) {
-      throw new NotFoundError('Account', accountId);
+    // 既にリフレッシュ処理が進行中の場合は、そのPromiseを待つ
+    if (this.refreshTokenLocks.has(accountId)) {
+      console.log(`⏳ Refresh token request for account ${accountId} is already in progress, waiting...`);
+      await this.refreshTokenLocks.get(accountId);
+      return;
     }
 
-    if (!account.oauth_refresh_token) {
-      throw new AuthenticationError('Refresh token not available');
-    }
+    // リフレッシュ処理を開始
+    const refreshPromise = (async () => {
+      try {
+        const account = await accountModel.findById(accountId);
+        if (!account) {
+          throw new NotFoundError('Account', accountId);
+        }
 
-    try {
-      // リフレッシュトークンを復号化
-      const decryptedRefreshToken = this.decryptToken(account.oauth_refresh_token);
+        if (!account.oauth_refresh_token) {
+          throw new AuthenticationError('Refresh token not available');
+        }
 
-      // 新しいアクセストークンを取得
-      this.oauth2Client.setCredentials({
-        refresh_token: decryptedRefreshToken
-      });
-      const { credentials } = await this.oauth2Client.refreshAccessToken();
+        console.log(`🔄 Refreshing token for account ${accountId}...`);
+        
+        // リフレッシュトークンを復号化
+        const decryptedRefreshToken = this.decryptToken(account.oauth_refresh_token);
 
-      if (!credentials.access_token) {
-        throw new Error('Failed to refresh access token');
+        // 新しいアクセストークンを取得
+        this.oauth2Client.setCredentials({
+          refresh_token: decryptedRefreshToken
+        });
+        const { credentials } = await this.oauth2Client.refreshAccessToken();
+
+        if (!credentials.access_token) {
+          throw new Error('Failed to refresh access token');
+        }
+
+        // 新しいトークンを暗号化
+        const encryptedAccessToken = this.encryptToken(credentials.access_token);
+        const encryptedRefreshToken = credentials.refresh_token
+          ? this.encryptToken(credentials.refresh_token)
+          : account.oauth_refresh_token; // リフレッシュトークンが更新されない場合は既存のものを保持
+
+        // トークンの有効期限を計算
+        const expiresAt = credentials.expiry_date
+          ? new Date(credentials.expiry_date)
+          : null;
+
+        // DBを更新
+        await accountModel.update(accountId, {
+          oauth_access_token: encryptedAccessToken,
+          oauth_refresh_token: encryptedRefreshToken,
+          oauth_expires_at: expiresAt
+        });
+
+        console.log(`✅ Token refreshed successfully for account ${accountId}`);
+      } catch (error: unknown) {
+        if (error instanceof Error && error.message?.includes('invalid_grant')) {
+          throw new AuthenticationError('Refresh token is invalid or expired');
+        }
+        throw error;
+      } finally {
+        // ロックを解除
+        this.refreshTokenLocks.delete(accountId);
       }
+    })();
 
-      // 新しいトークンを暗号化
-      const encryptedAccessToken = this.encryptToken(credentials.access_token);
-      const encryptedRefreshToken = credentials.refresh_token
-        ? this.encryptToken(credentials.refresh_token)
-        : account.oauth_refresh_token; // リフレッシュトークンが更新されない場合は既存のものを保持
-
-      // トークンの有効期限を計算
-      const expiresAt = credentials.expiry_date
-        ? new Date(credentials.expiry_date)
-        : null;
-
-      // DBを更新
-      await accountModel.update(accountId, {
-        oauth_access_token: encryptedAccessToken,
-        oauth_refresh_token: encryptedRefreshToken,
-        oauth_expires_at: expiresAt
-      });
-    } catch (error: unknown) {
-      if (error instanceof Error && error.message?.includes('invalid_grant')) {
-        throw new AuthenticationError('Refresh token is invalid or expired');
-      }
-      throw error;
-    }
+    // ロックを設定
+    this.refreshTokenLocks.set(accountId, refreshPromise);
+    
+    // リフレッシュ処理を実行
+    await refreshPromise;
   }
 
   /**

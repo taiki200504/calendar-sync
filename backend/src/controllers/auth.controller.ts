@@ -1,9 +1,18 @@
 import { Router, Request, Response } from 'express';
+import jwt from 'jsonwebtoken';
 import { oauthService } from '../services/oauth.service';
 import { oauthStateModel, OAuthState } from '../models/oauthStateModel';
+import { accountModel, Account } from '../models/accountModel.js';
 import crypto from 'crypto';
 import { logger } from '../utils/logger';
 import { toAppError } from '../utils/errors';
+
+/** Supabase JWT payload (access_token) */
+interface SupabaseJwtPayload {
+  sub: string;
+  email?: string;
+  user_metadata?: { email?: string };
+}
 
 export const authRouter = Router();
 
@@ -64,17 +73,17 @@ authRouter.get('/google', async (req: Request, res: Response) => {
         allEnvKeys: Object.keys(process.env).filter(k => k.includes('DATABASE') || k.includes('DB'))
       });
       
-      // データベース接続エラー
+      // データベース接続エラー（ENOTFOUND は Vercel から直接 DB ホストが名前解決できない場合）
       if (error.message?.includes('Database connection failed') || error.message?.includes('ENOTFOUND') || error.message?.includes('getaddrinfo')) {
         return res.status(500).json({ 
           error: 'Database connection failed',
           message: error.message || 'Failed to connect to database',
-          details: 'Please check DATABASE_URL environment variable in Vercel dashboard. The database hostname cannot be resolved.',
+          details: 'Use Supabase connection pooler in Vercel: set DATABASE_URL to Transaction mode (port 6543) or Session mode (pooler.supabase.com).',
           troubleshooting: [
-            '1. Go to Vercel Dashboard → Project → Settings → Environment Variables',
-            '2. Check if DATABASE_URL is set correctly',
-            '3. Verify the Supabase database URL format: postgresql://postgres:password@db.project-id.supabase.co:5432/postgres',
-            '4. Ensure the Supabase project is active and accessible'
+            '1. Supabase Dashboard → Project Settings → Database → Connection string',
+            '2. Select "Transaction" mode and copy the URI (port 6543)',
+            '3. In Vercel: Settings → Environment Variables → set DATABASE_URL to that URI',
+            '4. Redeploy the project. If still failing, try "Session" mode (pooler.supabase.com). See POOLER_FIX_JA.md.'
           ]
         });
       }
@@ -86,6 +95,22 @@ authRouter.get('/google', async (req: Request, res: Response) => {
           message: 'The oauth_states table does not exist. Please run database migrations.',
           details: 'Run: cd backend && npm run migrate:up',
           sqlFile: 'See MIGRATION_SQL.sql for manual SQL execution'
+        });
+      }
+
+      // Supabase プーラー認証エラー（リージョン違いや接続文字列の誤り）
+      if (error.message?.includes('Tenant or user not found') || error.message?.includes('SQLSTATE XX000')) {
+        return res.status(500).json({
+          error: 'Database authentication failed',
+          message: 'Tenant or user not found. The pooler URL region may not match your Supabase project.',
+          details: 'Copy the exact connection string from Supabase Dashboard (Connection string → Transaction or Session) and set it as DATABASE_URL in Vercel.',
+          troubleshooting: [
+            '1. Open Supabase Dashboard → your project → Project Settings → Database',
+            '2. Under "Connection string", select "URI" and choose "Transaction" (or "Session")',
+            '3. Copy the full URI (it includes the correct region, e.g. aws-0-us-east-1 or ap-northeast-1)',
+            '4. In Vercel: Settings → Environment Variables → set DATABASE_URL to that exact URI',
+            '5. Redeploy. See TENANT_NOT_FOUND_FIX.md for details.'
+          ]
         });
       }
       
@@ -107,6 +132,14 @@ authRouter.get('/google', async (req: Request, res: Response) => {
         error: 'Configuration error',
         message: appError.message,
         details: 'Please check your .env file and ensure all required environment variables are set.'
+      });
+    }
+    // DB認証エラーが外に伝わった場合（Tenant or user not found）
+    if (appError.message?.includes('Tenant or user not found') || appError.message?.includes('SQLSTATE XX000')) {
+      return res.status(500).json({
+        error: 'Database authentication failed',
+        message: appError.message,
+        details: 'Copy the exact connection string from Supabase Dashboard (Connection string → Transaction or Session) and set DATABASE_URL in Vercel. See TENANT_NOT_FOUND_FIX.md.'
       });
     }
     return res.status(500).json({ error: 'Failed to generate auth URL', message: appError.message });
@@ -166,6 +199,16 @@ authRouter.get('/google/callback', async (req: Request, res: Response) => {
     logger.info('Processing OAuth callback', { codeLength: code.length, state });
     const account = await oauthService.handleCallback(code);
     logger.info('OAuth callback processed successfully', { accountId: account.id, email: account.email });
+
+    // リフレッシュトークンが取得できているか確認
+    const accountWithToken = await accountModel.findById(account.id);
+    if (accountWithToken && !accountWithToken.oauth_refresh_token) {
+      logger.warn('Refresh token was not obtained during OAuth callback', {
+        accountId: account.id,
+        email: account.email,
+        warning: 'User will need to re-authenticate when access token expires'
+      });
+    }
 
     // セッションにアカウントIDを保存（アカウント追加モードでない場合、または新規ログインの場合）
     if (!savedState.add_account_mode) {
@@ -244,6 +287,104 @@ authRouter.get('/me', async (req: Request, res: Response) => {
     const appError = toAppError(error);
     logger.error('Error getting current user', { error: appError.message });
     return res.status(500).json({ error: 'Failed to get current user' });
+  }
+});
+
+/**
+ * POST /api/auth/supabase-session
+ * Supabase Auth (Google) でサインインしたあと、access_token を送りサーバーセッションを確立する
+ * Body: { access_token: string }
+ */
+authRouter.post('/supabase-session', async (req: Request, res: Response) => {
+  try {
+    const { access_token } = req.body;
+    if (!access_token || typeof access_token !== 'string') {
+      return res.status(400).json({ error: 'access_token is required' });
+    }
+
+    const secret = process.env.SUPABASE_JWT_SECRET;
+    if (!secret) {
+      logger.error('SUPABASE_JWT_SECRET is not set');
+      return res.status(500).json({ error: 'Server configuration error' });
+    }
+
+    let payload: SupabaseJwtPayload;
+    try {
+      payload = jwt.verify(access_token, secret) as SupabaseJwtPayload;
+    } catch (err) {
+      logger.warn('Invalid Supabase JWT', { error: (err as Error).message });
+      return res.status(401).json({ error: 'Invalid or expired token' });
+    }
+
+    const supabaseUserId = payload.sub;
+    const email =
+      payload.email ||
+      payload.user_metadata?.email ||
+      '';
+    if (!email) {
+      return res.status(400).json({ error: 'Email not found in token' });
+    }
+
+    let account: Account;
+    try {
+      account = await accountModel.findBySupabaseUserId(supabaseUserId);
+      if (!account) {
+        account = await accountModel.findByEmail(email);
+        if (account) {
+          await accountModel.update(account.id, { supabase_user_id: supabaseUserId });
+        } else {
+          account = await accountModel.create({
+            email,
+            provider: 'google',
+            supabase_user_id: supabaseUserId,
+          });
+        }
+      }
+    } catch (dbErr: unknown) {
+      const e = dbErr as Error & { code?: string };
+      logger.error('Supabase session DB error', { error: e.message, code: e.code });
+      const hint = e.message?.includes('supabase_user_id') || e.code === '42703'
+        ? 'Run migration: cd backend && npm run migrate:up'
+        : undefined;
+      return res.status(500).json({
+        error: 'Database error during Supabase login',
+        message: e.message,
+        ...(hint && { hint }),
+      });
+    }
+
+    req.session.accountId = account.id;
+    try {
+      await new Promise<void>((resolve, reject) => {
+        req.session.save((err) => {
+          if (err) {
+            logger.error('Failed to save session after Supabase login', { error: err });
+            reject(err);
+          } else resolve();
+        });
+      });
+    } catch (sessionErr: unknown) {
+      const e = sessionErr as Error;
+      logger.error('Supabase session save error', { error: e.message });
+      return res.status(500).json({
+        error: 'Session save failed',
+        message: e.message,
+      });
+    }
+
+    logger.info('Supabase session established', { accountId: account.id, email: account.email });
+    return res.json({
+      success: true,
+      user: { id: account.id, email: account.email },
+    });
+  } catch (error: unknown) {
+    const appError = toAppError(error);
+    const e = error as Error & { code?: string };
+    logger.error('Supabase session error', { error: appError.message, code: e.code, stack: e.stack });
+    return res.status(500).json({
+      error: 'Supabase session failed',
+      message: appError.message,
+    });
   }
 });
 

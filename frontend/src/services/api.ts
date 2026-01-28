@@ -19,9 +19,11 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     if (error.response?.status === 401) {
-      // セッションが無効な場合、ログインページにリダイレクト
-      // セッションベースの認証では、リフレッシュトークンは不要
-      window.location.href = '/';
+      // 認証エラーの場合、OAuth認証ページへリダイレクト
+      // これにより、トークンリフレッシュに失敗した場合でも自動的に再認証できる
+      const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
+      window.location.href = `${API_BASE_URL}/auth/google`;
+      return Promise.reject(error);
     }
     return Promise.reject(error);
   }
