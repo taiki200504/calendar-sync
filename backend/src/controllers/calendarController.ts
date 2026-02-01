@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { calendarService } from '../services/calendar.service';
 import { calendarModel } from '../models/calendarModel';
+import { accountModel } from '../models/accountModel';
 import { googleCalendarService } from '../services/google-calendar.service';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 
@@ -11,21 +12,28 @@ calendarRouter.use(authenticateToken);
 
 /**
  * GET /api/calendars
- * 全アカウントのカレンダー一覧を返す
+ * 現在のユーザーに紐づく全アカウントのカレンダー一覧を返す（複数アカウント対応）
  */
-calendarRouter.get('/', async (_req: Request, res: Response) => {
+calendarRouter.get('/', async (req: Request, res: Response) => {
   try {
-    const calendars = await calendarModel.findAll();
-    
-    // レスポンス形式を整形
+    const accountId = (req as AuthRequest).accountId;
+    if (!accountId) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+    const accountIds = await accountModel.findAccountIdsForCurrentUser(accountId);
+    const calendars = await calendarModel.findByAccountIds(accountIds);
+
     const formattedCalendars = calendars.map((cal: any) => ({
       id: cal.id,
+      account_id: cal.account_id,
       account_email: cal.account_email,
       name: cal.name,
+      gcal_calendar_id: cal.gcal_calendar_id,
       sync_enabled: cal.sync_enabled,
-      privacy_mode: cal.privacy_mode
+      sync_direction: cal.sync_direction,
+      privacy_mode: cal.privacy_mode,
     }));
-    
+
     return res.json({ calendars: formattedCalendars });
   } catch (error: any) {
     console.error('Error fetching calendars:', error);
@@ -35,12 +43,20 @@ calendarRouter.get('/', async (_req: Request, res: Response) => {
 
 /**
  * POST /api/calendars/:accountId/sync
- * fetchCalendars()を実行してカレンダー同期
+ * Google からカレンダー一覧を取得してDBに保存（現在ユーザーのアカウントのみ許可）
  */
 calendarRouter.post('/:accountId/sync', async (req: Request, res: Response) => {
   try {
+    const sessionAccountId = (req as AuthRequest).accountId;
+    if (!sessionAccountId) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
     const { accountId } = req.params;
-    
+    const allowedIds = await accountModel.findAccountIdsForCurrentUser(sessionAccountId);
+    if (!allowedIds.includes(accountId)) {
+      return res.status(403).json({ error: 'Access denied to this account' });
+    }
+
     const calendars = await calendarService.fetchCalendars(accountId);
     
     return res.json({ 

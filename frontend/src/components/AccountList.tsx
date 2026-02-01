@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { accountService, Account } from '../services/accountService';
+import { calendarService } from '../services/calendarService';
 import { syncService } from '../services/syncService';
 import { formatDistanceToNow } from 'date-fns';
 import { ja } from 'date-fns/locale';
@@ -12,12 +13,24 @@ export function AccountList() {
     queryFn: () => accountService.getAccounts(),
   });
 
+  /** 指定アカウントのカレンダーを Google から取得（アカウントごと） */
+  const syncCalendarsMutation = useMutation({
+    mutationFn: (accountId: string) => calendarService.syncCalendarsForAccount(accountId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['calendars'] });
+      queryClient.invalidateQueries({ queryKey: ['syncStatus'] });
+      queryClient.invalidateQueries({ queryKey: ['accounts'] });
+    },
+  });
+
+  /** 全アカウントのイベント同期をトリガー */
   const syncMutation = useMutation({
     mutationFn: () => syncService.triggerSync(),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['accounts'] });
       queryClient.invalidateQueries({ queryKey: ['syncStatus'] });
       queryClient.invalidateQueries({ queryKey: ['syncHistory'] });
+      queryClient.invalidateQueries({ queryKey: ['calendars'] });
     },
   });
 
@@ -25,11 +38,16 @@ export function AccountList() {
     mutationFn: (id: string) => accountService.deleteAccount(id),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['accounts'] });
+      queryClient.invalidateQueries({ queryKey: ['calendars'] });
     },
   });
 
-  const handleSync = () => {
-    if (window.confirm('今すぐ同期を実行しますか？')) {
+  const handleSyncCalendars = (accountId: string) => {
+    syncCalendarsMutation.mutate(accountId);
+  };
+
+  const handleSyncAll = () => {
+    if (window.confirm('全カレンダーのイベント同期を実行しますか？')) {
       syncMutation.mutate();
     }
   };
@@ -92,9 +110,18 @@ export function AccountList() {
               </div>
               <div className="flex items-center space-x-2">
                 <button
-                  onClick={handleSync}
-                  disabled={syncMutation.isPending}
+                  onClick={() => handleSyncCalendars(account.id)}
+                  disabled={syncCalendarsMutation.isPending}
                   className="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Google からカレンダー一覧を取得"
+                >
+                  {syncCalendarsMutation.isPending ? '取得中...' : 'カレンダーを取得'}
+                </button>
+                <button
+                  onClick={handleSyncAll}
+                  disabled={syncMutation.isPending}
+                  className="px-3 py-1.5 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="全カレンダーのイベントを同期"
                 >
                   {syncMutation.isPending ? '同期中...' : '今すぐ同期'}
                 </button>

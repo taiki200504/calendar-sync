@@ -41,13 +41,17 @@ export const errorHandler = (
     });
   }
 
-  // クライアントに返すエラーレスポンス
+  // クライアントに返すエラーレスポンス（500の原因特定のため path を常に含める）
   const response: {
     error: string;
     code?: string;
+    path?: string;
+    method?: string;
     stack?: string;
   } = {
-    error: appError.message
+    error: appError.message,
+    path: req.path,
+    method: req.method
   };
 
   // エラーコードがある場合は追加

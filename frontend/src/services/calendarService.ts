@@ -7,6 +7,12 @@ export const calendarService = {
     return response.data;
   },
 
+  /** 指定アカウントの Google カレンダー一覧を取得してDBに保存 */
+  async syncCalendarsForAccount(accountId: string): Promise<{ calendars: Calendar[] }> {
+    const response = await api.post(`/calendars/${accountId}/sync`);
+    return response.data;
+  },
+
   async updateCalendar(id: string, updates: {
     sync_enabled?: boolean;
     sync_direction?: 'bidirectional' | 'readonly' | 'writeonly';

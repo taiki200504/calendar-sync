@@ -25,6 +25,12 @@ api.interceptors.response.use(
       window.location.href = `${API_BASE_URL}/auth/google`;
       return Promise.reject(error);
     }
+    // 500 の原因特定のためコンソールに URL とレスポンスを出力
+    if (error.response?.status === 500) {
+      const url = error.config?.url ?? error.config?.baseURL ?? 'unknown';
+      const data = error.response?.data;
+      console.error('[500] Failed request:', url, data ?? error.message);
+    }
     return Promise.reject(error);
   }
 );

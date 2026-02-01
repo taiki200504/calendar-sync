@@ -41,6 +41,20 @@ class CalendarModel {
     return result.rows;
   }
 
+  /** 指定したアカウントIDのいずれかに属するカレンダーを取得（複数アカウント対応） */
+  async findByAccountIds(accountIds: string[]): Promise<Calendar[]> {
+    if (accountIds.length === 0) return [];
+    const result = await db.query<Calendar>(
+      `SELECT c.*, a.email as account_email 
+       FROM calendars c 
+       JOIN accounts a ON c.account_id = a.id 
+       WHERE c.account_id = ANY($1::uuid[])
+       ORDER BY a.email, c.name NULLS LAST, c.created_at DESC`,
+      [accountIds]
+    );
+    return result.rows;
+  }
+
   async findById(id: string): Promise<Calendar | null> {
     const result = await db.query<Calendar>(
       'SELECT * FROM calendars WHERE id = $1',

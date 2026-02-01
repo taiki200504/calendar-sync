@@ -38,6 +38,18 @@ class AccountModel {
     return result.rows[0] || null;
   }
 
+  /** 同一 Supabase ユーザーに紐づく全アカウントIDを取得（複数アカウント対応） */
+  async findAccountIdsForCurrentUser(sessionAccountId: string): Promise<string[]> {
+    const account = await this.findById(sessionAccountId);
+    if (!account) return [sessionAccountId];
+    if (!account.supabase_user_id) return [sessionAccountId];
+    const result = await db.query<{ id: string }>(
+      'SELECT id FROM accounts WHERE supabase_user_id = $1 ORDER BY created_at DESC',
+      [account.supabase_user_id]
+    );
+    return result.rows.map((r) => r.id);
+  }
+
   async findByUserId(_userId: number): Promise<Account[]> {
     // ユーザーIDからアカウントを取得するロジック
     // 現在の認証システムではuserIdがJWTに含まれているが、
