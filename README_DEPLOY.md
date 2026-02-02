@@ -1,6 +1,23 @@
 # デプロイクイックスタート
 
-## 🚀 最短手順
+## Vercel（Git 連携・自動リデプロイ）
+
+リポジトリを Vercel に接続している場合、**main への push で自動的に本番デプロイ**されます。
+
+```bash
+# 変更をコミットしてプッシュ → Vercel が自動でデプロイ
+npm run deploy
+
+# コミットメッセージを指定する場合
+npm run deploy -- "fix: カレンダー一覧の表示修正"
+```
+
+- デプロイ状況: [Vercel ダッシュボード](https://vercel.com/dashboard)
+- 修正後は `npm run deploy` を実行するだけで、push まで行い Vercel がリデプロイします。
+
+---
+
+## 🚀 最短手順（Docker 等）
 
 ### 1. 環境変数の設定
 

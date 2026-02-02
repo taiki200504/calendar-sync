@@ -4,6 +4,7 @@ import { calendarModel } from '../models/calendarModel';
 import { accountModel } from '../models/accountModel';
 import { googleCalendarService } from '../services/google-calendar.service';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
+import { isAppError } from '../utils/errors';
 
 export const calendarRouter = Router();
 
@@ -69,9 +70,16 @@ calendarRouter.post('/:accountId/sync', async (req: Request, res: Response) => {
         privacy_mode: cal.privacy_mode
       }))
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error('Error syncing calendars:', error);
-    return res.status(500).json({ error: 'Failed to sync calendars', message: error.message });
+    if (isAppError(error)) {
+      return res.status(error.statusCode).json({
+        error: error.message,
+        code: error.code,
+      });
+    }
+    const message = error instanceof Error ? error.message : 'Failed to sync calendars';
+    return res.status(500).json({ error: 'Failed to sync calendars', message });
   }
 });
 

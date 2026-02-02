@@ -15,6 +15,7 @@ import { freebusyRouter } from '../backend/src/controllers/freebusy.controller';
 import { conflictRouter } from '../backend/src/controllers/conflict.controller';
 import { webhookRouter } from '../backend/src/controllers/webhook.controller';
 import { rulesRouter } from '../backend/src/controllers/rules.controller';
+import { syncConnectionsRouter } from '../backend/src/controllers/syncConnections.controller';
 import { logger } from '../backend/src/utils/logger';
 
 // 環境変数を読み込む
@@ -108,6 +109,7 @@ app.use('/api/freebusy', freebusyRouter);
 app.use('/api/conflicts', conflictRouter);
 app.use('/api/webhooks', webhookRouter);
 app.use('/api/rules', rulesRouter);
+app.use('/api/sync-connections', syncConnectionsRouter);
 
 // Error handler
 app.use(errorHandler);

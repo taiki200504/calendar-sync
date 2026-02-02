@@ -19,8 +19,10 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     if (error.response?.status === 401) {
-      // 認証エラーの場合、OAuth認証ページへリダイレクト
-      // これにより、トークンリフレッシュに失敗した場合でも自動的に再認証できる
+      const data = error.response?.data;
+      if (data?.code === 'ENCRYPTION_KEY_MISMATCH') {
+        alert(data?.error || '暗号化キーの不一致のため、Googleアカウントを再連携してください。');
+      }
       const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
       window.location.href = `${API_BASE_URL}/auth/google`;
       return Promise.reject(error);

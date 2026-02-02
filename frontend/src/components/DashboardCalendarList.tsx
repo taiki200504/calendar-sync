@@ -58,9 +58,9 @@ export function DashboardCalendarList() {
         <div className="px-6 py-8 text-center">
           <p className="text-gray-500 mb-2">まだカレンダーがありません</p>
           <p className="text-sm text-gray-400">
-            上の「アカウント一覧」で各アカウントの
-            <span className="font-medium text-blue-600">カレンダーを取得</span>
-            を押すと、Google カレンダーがここに表示されます
+            アカウントを追加すると自動でカレンダーが取得されます。既存アカウントは
+            <span className="font-medium text-gray-600">カレンダーを再取得</span>
+            で更新できます
           </p>
         </div>
       </div>

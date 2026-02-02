@@ -90,9 +90,20 @@ class OAuthService {
       Buffer.from(this.encryptionKey),
       iv
     );
-    let decrypted = decipher.update(encrypted, 'hex', 'utf8');
-    decrypted += decipher.final('utf8');
-    return decrypted;
+    try {
+      let decrypted = decipher.update(encrypted, 'hex', 'utf8');
+      decrypted += decipher.final('utf8');
+      return decrypted;
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('bad decrypt') || msg.includes('1C800064')) {
+        throw new AuthenticationError(
+          'Token decryption failed. ENCRYPTION_KEY may have changed. Please disconnect and reconnect your Google account.',
+          'ENCRYPTION_KEY_MISMATCH'
+        );
+      }
+      throw err;
+    }
   }
 
   /**
@@ -309,6 +320,9 @@ class OAuthService {
 
         console.log(`✅ Token refreshed successfully for account ${accountId}`);
       } catch (error: unknown) {
+        if (error instanceof AuthenticationError) {
+          throw error;
+        }
         if (error instanceof Error && error.message?.includes('invalid_grant')) {
           throw new AuthenticationError('Refresh token is invalid or expired');
         }

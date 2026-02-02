@@ -3,6 +3,7 @@ import * as jwt from 'jsonwebtoken';
 import { oauthService } from '../services/oauth.service';
 import { oauthStateModel, OAuthState } from '../models/oauthStateModel';
 import { accountModel, Account } from '../models/accountModel.js';
+import { calendarService } from '../services/calendar.service';
 import crypto from 'crypto';
 import { logger } from '../utils/logger';
 import { toAppError } from '../utils/errors';
@@ -229,6 +230,16 @@ authRouter.get('/google/callback', async (req: Request, res: Response) => {
           });
           resolve();
         }
+      });
+    });
+
+    // アカウント追加直後に Google からカレンダー一覧を自動取得（非ブロッキング）
+    calendarService.fetchCalendars(account.id).then((calendars) => {
+      logger.info('Calendars auto-fetched after account add', { accountId: account.id, count: calendars.length });
+    }).catch((err) => {
+      logger.warn('Calendars auto-fetch failed after account add (user can retry from dashboard)', {
+        accountId: account.id,
+        error: err instanceof Error ? err.message : String(err),
       });
     });
 

@@ -78,7 +78,10 @@ export function AccountList() {
   return (
     <div className="bg-white shadow rounded-lg overflow-hidden">
       <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-gray-900">アカウント一覧</h2>
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900">アカウント一覧</h2>
+          <p className="text-xs text-gray-500 mt-0.5">アカウント追加時にカレンダーは自動で取得されます</p>
+        </div>
         <button
           onClick={handleAddAccount}
           className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
@@ -112,10 +115,10 @@ export function AccountList() {
                 <button
                   onClick={() => handleSyncCalendars(account.id)}
                   disabled={syncCalendarsMutation.isPending}
-                  className="px-3 py-1.5 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                  title="Google からカレンダー一覧を取得"
+                  className="px-3 py-1.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-md hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Google からカレンダー一覧を再取得（追加時は自動取得されます）"
                 >
-                  {syncCalendarsMutation.isPending ? '取得中...' : 'カレンダーを取得'}
+                  {syncCalendarsMutation.isPending ? '取得中...' : 'カレンダーを再取得'}
                 </button>
                 <button
                   onClick={handleSyncAll}

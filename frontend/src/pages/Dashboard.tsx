@@ -1,6 +1,7 @@
 import { AccountList } from '../components/AccountList';
 import { SyncStatus } from '../components/SyncStatus';
 import { DashboardCalendarList } from '../components/DashboardCalendarList';
+import { SyncConnections } from '../components/SyncConnections';
 import { ConflictCards } from '../components/ConflictCards';
 import { SyncLog } from '../components/SyncLog';
 
@@ -23,6 +24,9 @@ export function Dashboard() {
 
         {/* カレンダー一覧（複数アカウント・複数カレンダー、Notion風） */}
         <DashboardCalendarList />
+
+        {/* 同期接続（カレンダー単位で相互同期するペアを設定） */}
+        <SyncConnections />
 
         {/* 競合予定 */}
         <ConflictCards />

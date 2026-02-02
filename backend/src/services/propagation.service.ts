@@ -1,6 +1,7 @@
 import { canonicalEventModel, CanonicalEvent } from '../models/canonical-event.model';
 import { eventLinkModel, EventLink } from '../models/event-link.model';
 import { calendarModel, Calendar } from '../models/calendarModel';
+import { syncConnectionModel } from '../models/syncConnection.model';
 import { googleCalendarService } from './google-calendar.service';
 import { calendar_v3 } from 'googleapis';
 import { NotFoundError } from '../utils/errors';
@@ -53,7 +54,16 @@ class PropagationService {
     const allLinks = await eventLinkModel.findByCanonicalId(canonicalId);
 
     // c. sourceを除外
-    const targetLinks = allLinks.filter(link => link.id !== sourceEventLinkId);
+    let targetLinks = allLinks.filter(link => link.id !== sourceEventLinkId);
+
+    // 接続設定: ソースカレンダーと接続されているカレンダーにのみ伝播（接続が1件以上ある場合）
+    const sourceLink = await eventLinkModel.findById(sourceEventLinkId);
+    if (sourceLink) {
+      const connectedIds = await syncConnectionModel.findConnectedCalendarIds(sourceLink.calendar_id);
+      if (connectedIds.length > 0) {
+        targetLinks = targetLinks.filter(link => connectedIds.includes(link.calendar_id));
+      }
+    }
 
     // d. 各targetに対して伝播
     for (const targetLink of targetLinks) {

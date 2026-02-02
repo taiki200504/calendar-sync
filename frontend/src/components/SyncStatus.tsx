@@ -18,94 +18,66 @@ export function SyncStatus() {
   const { data: status, isLoading } = useQuery<SyncStatusData>({
     queryKey: ['syncStatus'],
     queryFn: () => syncService.getOverallSyncStatus(),
-    refetchInterval: 5000, // 5秒ごとに更新
+    refetchInterval: 5000,
   });
 
   if (isLoading) {
     return (
-      <div className="bg-white shadow rounded-lg p-6">
-        <div className="text-center py-4">読み込み中...</div>
+      <div className="bg-white shadow rounded-lg px-4 py-3">
+        <span className="text-sm text-gray-500">同期ステータス: 読み込み中...</span>
       </div>
     );
   }
 
   if (!status) {
     return (
-      <div className="bg-white shadow rounded-lg p-6">
-        <p className="text-gray-500 text-center">データがありません</p>
+      <div className="bg-white shadow rounded-lg px-4 py-3">
+        <span className="text-sm text-gray-500">同期ステータス: データがありません</span>
       </div>
     );
   }
 
-  // デフォルト値を設定してundefinedを防ぐ
   const successRate = status.successRate ?? 0;
   const errorCount = status.errorCount ?? 0;
-
-  const circumference = 2 * Math.PI * 45; // 半径45の円周
+  const enabledCalendars = status.enabledCalendars ?? 0;
+  const totalCalendars = status.totalCalendars ?? 0;
+  const circumference = 2 * Math.PI * 18;
   const offset = circumference - (successRate / 100) * circumference;
 
   return (
-    <div className="bg-white shadow rounded-lg p-6">
-      <h2 className="text-lg font-semibold text-gray-900 mb-4">同期ステータス</h2>
-      
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* 成功率 */}
-        <div className="flex flex-col items-center">
-          <div className="relative w-24 h-24">
-            <svg className="transform -rotate-90 w-24 h-24">
+    <div className="bg-white shadow rounded-lg px-4 py-3">
+      <div className="flex items-center gap-4 flex-wrap">
+        <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">同期ステータス</span>
+        <div className="flex items-center gap-2">
+          <div className="relative w-10 h-10 flex-shrink-0">
+            <svg className="w-10 h-10 transform -rotate-90" viewBox="0 0 40 40">
+              <circle cx="20" cy="20" r="18" fill="none" stroke="currentColor" strokeWidth="3" className="text-gray-200" />
               <circle
-                cx="48"
-                cy="48"
-                r="45"
-                stroke="currentColor"
-                strokeWidth="6"
+                cx="20"
+                cy="20"
+                r="18"
                 fill="none"
-                className="text-gray-200"
-              />
-              <circle
-                cx="48"
-                cy="48"
-                r="45"
                 stroke="currentColor"
-                strokeWidth="6"
-                fill="none"
+                strokeWidth="3"
                 strokeDasharray={circumference}
                 strokeDashoffset={offset}
                 className="text-green-500 transition-all duration-300"
                 strokeLinecap="round"
               />
             </svg>
-            <div className="absolute inset-0 flex items-center justify-center">
-              <span className="text-xl font-bold text-gray-900">
-                {successRate.toFixed(1)}%
-              </span>
-            </div>
-          </div>
-          <p className="mt-2 text-sm text-gray-600">成功率</p>
-        </div>
-
-        {/* エラー数 */}
-        <div className="flex flex-col items-center justify-center">
-          <div className="text-4xl font-bold text-gray-900">{errorCount}</div>
-          <p className="mt-2 text-sm text-gray-600">エラー数</p>
-          {errorCount > 0 && (
-            <span className="mt-1 inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-              要確認
+            <span className="absolute inset-0 flex items-center justify-center text-xs font-semibold text-gray-900">
+              {successRate.toFixed(0)}%
             </span>
-          )}
-        </div>
-
-        {/* 有効なカレンダー数 */}
-        <div className="flex flex-col items-center justify-center">
-          <div className="text-4xl font-bold text-gray-900">
-            {status.enabledCalendars ?? 0}
           </div>
-          <p className="mt-2 text-sm text-gray-600">有効なカレンダー</p>
-          {status.totalCalendars !== undefined && (
-            <p className="text-xs text-gray-500 mt-1">
-              全 {status.totalCalendars} カレンダー中
-            </p>
-          )}
+          <span className="text-xs text-gray-600">成功率</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-lg font-semibold text-gray-900">{errorCount}</span>
+          <span className="text-xs text-gray-600">エラー</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-lg font-semibold text-gray-900">{enabledCalendars}</span>
+          <span className="text-xs text-gray-600">有効 / 全{totalCalendars} カレンダー</span>
         </div>
       </div>
     </div>

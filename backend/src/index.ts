@@ -15,6 +15,7 @@ import { freebusyRouter } from './controllers/freebusy.controller';
 import { conflictRouter } from './controllers/conflict.controller';
 import { webhookRouter } from './controllers/webhook.controller';
 import { rulesRouter } from './controllers/rules.controller';
+import { syncConnectionsRouter } from './controllers/syncConnections.controller';
 import cron from 'node-cron';
 import { renewExpiredWatches } from './jobs/watch-renewal.job';
 import { logger } from './utils/logger';
@@ -111,6 +112,7 @@ app.use('/api/sync', syncRouter);
 app.use('/api/freebusy', freebusyRouter);
 app.use('/api/conflicts', conflictRouter);
 app.use('/api/rules', rulesRouter);
+app.use('/api/sync-connections', syncConnectionsRouter);
 app.use('/api/webhooks', webhookRouter);
 
 // 404 handler

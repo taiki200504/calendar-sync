@@ -128,6 +128,30 @@
 
 ---
 
+### 2e. bad decrypt / ENCRYPTION_KEY の不一致（カレンダー取得・同期で 500）
+
+**当てはまりそうな場合**
+- `/api/calendars/:accountId/sync` やカレンダー同期で 500 になる
+- レスポンスの **message** に `error:1C800064:Provider routines::bad decrypt` や **bad decrypt** が出ている
+
+**原因**
+- OAuth トークン（Google のアクセス／リフレッシュトークン）は **ENCRYPTION_KEY** で暗号化して DB に保存しています。
+- **Vercel の ENCRYPTION_KEY** が、アカウント連携時に使っていたキーと**違う**と復号に失敗し、「bad decrypt」になります。
+- 例: ローカルで連携したあと本番のキーを変えた、Vercel の環境変数を変更した、など。
+
+**やること（どちらか一方でOK）**
+
+1. **ENCRYPTION_KEY を元に戻す**
+   - アカウントを連携したときと同じ **ENCRYPTION_KEY** を Vercel の環境変数に設定する。
+   - 覚えていなければ、下記「再連携」で解消する。
+
+2. **Google アカウントを再連携する（推奨）**
+   - ダッシュボードで該当アカウントを **削除** し、もう一度 **+ アカウントを追加** から Google でログインする。
+   - 新しいトークンが**いまの ENCRYPTION_KEY** で暗号化され、以降は「bad decrypt」が出なくなります。
+   - 修正後、API が 401 と `ENCRYPTION_KEY_MISMATCH` を返す場合は、画面に「再連携してください」と出てから Google 認証へ飛ぶようになっています。
+
+---
+
 ## ステップ3: サーバーログで詳細を確認する（Vercel の場合）
 
 1. Vercel ダッシュボード → 対象プロジェクト → **Logs** または **Deployments** → 該当デプロイ → **Functions**。
@@ -136,6 +160,7 @@
    - **DATABASE** → 2a / 2b  
    - **Redis / session** → 2c  
    - **auth / account** → 2d  
+   - **bad decrypt / ENCRYPTION_KEY** → 2e  
    のどれに当てはまるか判断する。
 
 ---
