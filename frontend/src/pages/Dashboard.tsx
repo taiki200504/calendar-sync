@@ -1,11 +1,30 @@
+import { useEffect, useRef } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { AccountList } from '../components/AccountList';
 import { SyncStatus } from '../components/SyncStatus';
 import { DashboardCalendarList } from '../components/DashboardCalendarList';
 import { SyncConnections } from '../components/SyncConnections';
 import { ConflictCards } from '../components/ConflictCards';
 import { SyncLog } from '../components/SyncLog';
+import { calendarService } from '../services/calendarService';
+import { syncService } from '../services/syncService';
 
 export function Dashboard() {
+  const { data: calendarsData } = useQuery({
+    queryKey: ['calendars'],
+    queryFn: () => calendarService.getCalendars(),
+  });
+  const hasAutoTriggered = useRef(false);
+
+  useEffect(() => {
+    if (hasAutoTriggered.current) return;
+    const calendars = calendarsData?.calendars ?? [];
+    const enabled = calendars.filter((c: { sync_enabled?: boolean }) => c.sync_enabled);
+    if (enabled.length === 0) return;
+    hasAutoTriggered.current = true;
+    syncService.triggerSync().catch(() => {});
+  }, [calendarsData?.calendars]);
+
   return (
     <div className="px-4 py-6 sm:px-0">
       <div className="mb-8">
