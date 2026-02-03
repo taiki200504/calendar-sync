@@ -4,6 +4,7 @@ import { calendarService } from '../services/calendarService';
 import { syncService } from '../services/syncService';
 import { formatDistanceToNow } from 'date-fns';
 import { ja } from 'date-fns/locale';
+import { toast } from './Toast';
 
 export function AccountList() {
   const queryClient = useQueryClient();
@@ -20,17 +21,26 @@ export function AccountList() {
       queryClient.invalidateQueries({ queryKey: ['calendars'] });
       queryClient.invalidateQueries({ queryKey: ['syncStatus'] });
       queryClient.invalidateQueries({ queryKey: ['accounts'] });
+      toast.success('カレンダー一覧を取得しました');
+    },
+    onError: (error: Error) => {
+      toast.error(`カレンダー取得に失敗しました: ${error.message}`);
     },
   });
 
   /** 全アカウントのイベント同期をトリガー */
   const syncMutation = useMutation({
     mutationFn: () => syncService.triggerSync(),
-    onSuccess: () => {
+    onSuccess: (data: { calendarsSynced?: number }) => {
       queryClient.invalidateQueries({ queryKey: ['accounts'] });
       queryClient.invalidateQueries({ queryKey: ['syncStatus'] });
       queryClient.invalidateQueries({ queryKey: ['syncHistory'] });
       queryClient.invalidateQueries({ queryKey: ['calendars'] });
+      queryClient.invalidateQueries({ queryKey: ['syncLogs'] });
+      toast.success(`同期が完了しました（${data?.calendarsSynced || 0}件）`);
+    },
+    onError: (error: Error) => {
+      toast.error(`同期に失敗しました: ${error.message}`);
     },
   });
 
@@ -39,6 +49,10 @@ export function AccountList() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['accounts'] });
       queryClient.invalidateQueries({ queryKey: ['calendars'] });
+      toast.success('アカウントを削除しました');
+    },
+    onError: (error: Error) => {
+      toast.error(`アカウント削除に失敗しました: ${error.message}`);
     },
   });
 

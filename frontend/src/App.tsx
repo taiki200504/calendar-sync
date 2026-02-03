@@ -7,26 +7,30 @@ import { ConflictDetail } from './pages/ConflictDetail';
 import { RulesPage } from './pages/Rules';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { Layout } from './components/Layout';
+import { ToastContainer } from './components/Toast';
 
 function App() {
   return (
-    <Routes>
-      <Route path="/" element={<Login />} />
-      <Route path="/auth/callback" element={<AuthCallback />} />
-      <Route
-        path="/"
-        element={
-          <ProtectedRoute>
-            <Layout />
-          </ProtectedRoute>
-        }
-      >
-        <Route path="dashboard" element={<Dashboard />} />
-        <Route path="find-slots" element={<FindSlots />} />
-        <Route path="rules" element={<RulesPage />} />
-        <Route path="conflicts/:id" element={<ConflictDetail />} />
-      </Route>
-    </Routes>
+    <>
+      <Routes>
+        <Route path="/" element={<Login />} />
+        <Route path="/auth/callback" element={<AuthCallback />} />
+        <Route
+          path="/"
+          element={
+            <ProtectedRoute>
+              <Layout />
+            </ProtectedRoute>
+          }
+        >
+          <Route path="dashboard" element={<Dashboard />} />
+          <Route path="find-slots" element={<FindSlots />} />
+          <Route path="rules" element={<RulesPage />} />
+          <Route path="conflicts/:id" element={<ConflictDetail />} />
+        </Route>
+      </Routes>
+      <ToastContainer />
+    </>
   );
 }
 
