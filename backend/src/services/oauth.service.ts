@@ -113,6 +113,7 @@ class OAuthService {
     const scopes = [
       'https://www.googleapis.com/auth/userinfo.email',
       'https://www.googleapis.com/auth/userinfo.profile',
+      'https://www.googleapis.com/auth/calendar.readonly',  // カレンダー一覧取得に必要
       'https://www.googleapis.com/auth/calendar.events',
       'https://www.googleapis.com/auth/calendar.events.freebusy'
     ];
