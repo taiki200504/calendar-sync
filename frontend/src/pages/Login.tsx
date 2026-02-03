@@ -1,18 +1,9 @@
-import { supabase } from '../lib/supabase';
+const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
 export function Login() {
-  const handleGoogleLogin = async () => {
-    const redirectTo = `${window.location.origin}/auth/callback`;
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: { redirectTo },
-    });
-    if (error) {
-      console.error('Supabase signIn error:', error);
-      window.location.href = '/api/auth/google'; // フォールバック: 従来のバックエンドOAuth
-      return;
-    }
-    // signInWithOAuth は redirectTo にリダイレクトするため、ここには通常戻ってこない
+  const handleGoogleLogin = () => {
+    // 1回の認証でログイン・カレンダー取得・同期まで完了（バックエンド OAuth）
+    window.location.href = `${API_BASE}/auth/google`;
   };
 
   return (

@@ -21,8 +21,14 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
         } else {
           setAuthenticated(false);
         }
-      } catch (error) {
-        console.error('Auth check failed:', error);
+      } catch (error: unknown) {
+        // 401エラーは未認証を意味する（正常な動作）
+        const axiosError = error as { response?: { status?: number } };
+        if (axiosError.response?.status === 401) {
+          console.debug('User not authenticated, redirecting to login');
+        } else {
+          console.error('Auth check failed:', error);
+        }
         setAuthenticated(false);
       } finally {
         setLoading(false);
@@ -41,6 +47,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-gray-600">認証確認中...</p>
         </div>
       </div>

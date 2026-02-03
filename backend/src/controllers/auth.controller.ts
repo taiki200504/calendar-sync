@@ -233,15 +233,16 @@ authRouter.get('/google/callback', async (req: Request, res: Response) => {
       });
     });
 
-    // アカウント追加直後に Google からカレンダー一覧を自動取得（非ブロッキング）
-    calendarService.fetchCalendars(account.id).then((calendars) => {
-      logger.info('Calendars auto-fetched after account add', { accountId: account.id, count: calendars.length });
-    }).catch((err) => {
-      logger.warn('Calendars auto-fetch failed after account add (user can retry from dashboard)', {
+    // 1回認証でカレンダー表示まで完了するよう、リダイレクト前にカレンダー取得
+    try {
+      const calendars = await calendarService.fetchCalendars(account.id);
+      logger.info('Calendars auto-fetched after login', { accountId: account.id, count: calendars.length });
+    } catch (err) {
+      logger.warn('Calendars auto-fetch failed (user can retry from dashboard)', {
         accountId: account.id,
         error: err instanceof Error ? err.message : String(err),
       });
-    });
+    }
 
     // フロントエンドにリダイレクト
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
