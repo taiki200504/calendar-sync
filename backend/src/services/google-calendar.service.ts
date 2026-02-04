@@ -154,6 +154,40 @@ class GoogleCalendarService {
   }
 
   /**
+   * カレンダーの色情報を取得
+   * @param accountId アカウントID（UUID）
+   * @returns Map<gcalCalendarId, backgroundColor>
+   */
+  async getCalendarColors(accountId: string): Promise<Map<string, string>> {
+    const auth = await oauthService.getAuthenticatedClient(accountId);
+    const calendarApi = google.calendar({ version: 'v3', auth });
+
+    try {
+      const response = await calendarApi.calendarList.list({
+        minAccessRole: 'reader'
+      });
+
+      const colors = new Map<string, string>();
+      const calendars = response.data.items || [];
+
+      for (const cal of calendars) {
+        if (cal.id && cal.backgroundColor) {
+          colors.set(cal.id, cal.backgroundColor);
+        }
+      }
+
+      return colors;
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error('Failed to get calendar colors', {
+        error: errorMessage,
+        accountId
+      });
+      return new Map();
+    }
+  }
+
+  /**
    * イベントを更新
    * @param calendarId カレンダーID（UUID）
    * @param eventId イベントID（Google Calendar Event ID）

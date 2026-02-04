@@ -150,12 +150,26 @@ calendarRouter.get('/all/events', async (req: Request, res: Response) => {
     const startDate = timeMin ? new Date(timeMin as string) : now;
     const endDate = timeMax ? new Date(timeMax as string) : new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
 
+    // アカウントごとにカレンダー色情報を取得
+    const calendarColors: Map<string, string> = new Map();
+    for (const aid of accountIds) {
+      try {
+        const colors = await googleCalendarService.getCalendarColors(aid);
+        colors.forEach((color, gcalId) => calendarColors.set(gcalId, color));
+      } catch (err) {
+        console.error(`Failed to fetch calendar colors for account ${aid}:`, err);
+      }
+    }
+
     // 各カレンダーからイベントを取得
     const allEvents: any[] = [];
     for (const calendar of enabledCalendars) {
       try {
         const cal = calendar as any; // JOINで取得した追加フィールドにアクセスするため
         const events = await googleCalendarService.listEvents(cal.id, startDate, cal.account_id);
+
+        // カレンダーの色を取得（なければデフォルト色）
+        const calColor = calendarColors.get(cal.gcal_calendar_id) || '#4285f4';
 
         // 期間内のイベントのみフィルタリングしてフォーマット
         const filteredEvents = events
@@ -169,7 +183,8 @@ calendarRouter.get('/all/events', async (req: Request, res: Response) => {
             id: event.id,
             calendarId: cal.id,
             calendarName: cal.name,
-            calendarColor: '#4285f4', // デフォルトカラー
+            gcalCalendarId: cal.gcal_calendar_id,
+            calendarColor: calColor,
             accountEmail: cal.account_email || '',
             title: event.summary || '(タイトルなし)',
             start: event.start?.dateTime || event.start?.date,
