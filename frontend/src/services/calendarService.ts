@@ -48,5 +48,39 @@ export const calendarService = {
   }): Promise<{ event: any }> {
     const response = await api.post(`/calendars/${calendarId}/events`, eventData);
     return response.data;
+  },
+
+  /** 特定カレンダーのイベント一覧を取得 */
+  async getEvents(calendarId: string, timeMin?: string, timeMax?: string): Promise<{ events: CalendarEvent[] }> {
+    const params = new URLSearchParams();
+    if (timeMin) params.append('timeMin', timeMin);
+    if (timeMax) params.append('timeMax', timeMax);
+    const response = await api.get(`/calendars/${calendarId}/events?${params.toString()}`);
+    return response.data;
+  },
+
+  /** 全カレンダーのイベント一覧を取得（統合ビュー用） */
+  async getAllEvents(timeMin?: string, timeMax?: string): Promise<{ events: CalendarEvent[] }> {
+    const params = new URLSearchParams();
+    if (timeMin) params.append('timeMin', timeMin);
+    if (timeMax) params.append('timeMax', timeMax);
+    const response = await api.get(`/calendars/all/events?${params.toString()}`);
+    return response.data;
   }
 };
+
+export interface CalendarEvent {
+  id: string;
+  calendarId?: string;
+  calendarName?: string;
+  calendarColor?: string;
+  accountEmail?: string;
+  title: string;
+  start: string;
+  end: string;
+  allDay: boolean;
+  location?: string;
+  description?: string;
+  status?: string;
+  htmlLink?: string;
+}
