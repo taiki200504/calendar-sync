@@ -126,73 +126,9 @@ calendarRouter.patch('/:id', async (req: Request, res: Response) => {
 });
 
 /**
- * GET /api/calendars/:calendarId/events
- * カレンダーのイベント一覧を取得
- * query: { timeMin?, timeMax? }
- */
-calendarRouter.get('/:calendarId/events', async (req: Request, res: Response) => {
-  try {
-    const accountId = (req as AuthRequest).accountId;
-    if (!accountId) {
-      return res.status(401).json({ error: 'Not authenticated' });
-    }
-
-    const { calendarId } = req.params;
-    const { timeMin, timeMax } = req.query;
-
-    // カレンダーを取得
-    const calendar = await calendarModel.findById(calendarId);
-    if (!calendar) {
-      return res.status(404).json({ error: 'Calendar not found' });
-    }
-
-    // アカウントの所有確認
-    const allowedIds = await accountModel.findAccountIdsForCurrentUser(accountId);
-    if (!allowedIds.includes(calendar.account_id)) {
-      return res.status(403).json({ error: 'Access denied' });
-    }
-
-    // 日付パラメータの設定（デフォルトは今日から30日間）
-    const now = new Date();
-    const startDate = timeMin ? new Date(timeMin as string) : now;
-    const endDate = timeMax ? new Date(timeMax as string) : new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-
-    // Google Calendarからイベントを取得
-    const events = await googleCalendarService.listEvents(calendarId, startDate, calendar.account_id);
-
-    // 期間内のイベントのみフィルタリング
-    const filteredEvents = events.filter(event => {
-      const eventStart = event.start?.dateTime || event.start?.date;
-      const eventEnd = event.end?.dateTime || event.end?.date;
-      if (!eventStart) return false;
-
-      const start = new Date(eventStart);
-      return start >= startDate && start <= endDate;
-    });
-
-    // イベントをフォーマット
-    const formattedEvents = filteredEvents.map(event => ({
-      id: event.id,
-      title: event.summary || '(タイトルなし)',
-      start: event.start?.dateTime || event.start?.date,
-      end: event.end?.dateTime || event.end?.date,
-      allDay: !event.start?.dateTime,
-      location: event.location,
-      description: event.description,
-      status: event.status,
-      htmlLink: event.htmlLink,
-    }));
-
-    return res.json({ events: formattedEvents });
-  } catch (error: any) {
-    console.error('Error fetching events:', error);
-    return res.status(500).json({ error: 'Failed to fetch events', message: error.message });
-  }
-});
-
-/**
- * GET /api/events
+ * GET /api/calendars/all/events
  * 全カレンダーのイベント一覧を取得（統合ビュー用）
+ * 注意: このルートは /:calendarId/events より前に定義する必要がある
  * query: { timeMin?, timeMax? }
  */
 calendarRouter.get('/all/events', async (req: Request, res: Response) => {
@@ -258,6 +194,71 @@ calendarRouter.get('/all/events', async (req: Request, res: Response) => {
     return res.json({ events: allEvents });
   } catch (error: any) {
     console.error('Error fetching all events:', error);
+    return res.status(500).json({ error: 'Failed to fetch events', message: error.message });
+  }
+});
+
+/**
+ * GET /api/calendars/:calendarId/events
+ * カレンダーのイベント一覧を取得
+ * query: { timeMin?, timeMax? }
+ */
+calendarRouter.get('/:calendarId/events', async (req: Request, res: Response) => {
+  try {
+    const accountId = (req as AuthRequest).accountId;
+    if (!accountId) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    const { calendarId } = req.params;
+    const { timeMin, timeMax } = req.query;
+
+    // カレンダーを取得
+    const calendar = await calendarModel.findById(calendarId);
+    if (!calendar) {
+      return res.status(404).json({ error: 'Calendar not found' });
+    }
+
+    // アカウントの所有確認
+    const allowedIds = await accountModel.findAccountIdsForCurrentUser(accountId);
+    if (!allowedIds.includes(calendar.account_id)) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    // 日付パラメータの設定（デフォルトは今日から30日間）
+    const now = new Date();
+    const startDate = timeMin ? new Date(timeMin as string) : now;
+    const endDate = timeMax ? new Date(timeMax as string) : new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+    // Google Calendarからイベントを取得
+    const events = await googleCalendarService.listEvents(calendarId, startDate, calendar.account_id);
+
+    // 期間内のイベントのみフィルタリング
+    const filteredEvents = events.filter(event => {
+      const eventStart = event.start?.dateTime || event.start?.date;
+      const eventEnd = event.end?.dateTime || event.end?.date;
+      if (!eventStart) return false;
+
+      const start = new Date(eventStart);
+      return start >= startDate && start <= endDate;
+    });
+
+    // イベントをフォーマット
+    const formattedEvents = filteredEvents.map(event => ({
+      id: event.id,
+      title: event.summary || '(タイトルなし)',
+      start: event.start?.dateTime || event.start?.date,
+      end: event.end?.dateTime || event.end?.date,
+      allDay: !event.start?.dateTime,
+      location: event.location,
+      description: event.description,
+      status: event.status,
+      htmlLink: event.htmlLink,
+    }));
+
+    return res.json({ events: formattedEvents });
+  } catch (error: any) {
+    console.error('Error fetching events:', error);
     return res.status(500).json({ error: 'Failed to fetch events', message: error.message });
   }
 });
