@@ -246,7 +246,7 @@ export function Dashboard() {
             )}
           </button>
           <a
-            href="/api/auth/google"
+            href="/api/auth/google?addAccount=true"
             className="flex items-center gap-2 px-4 py-2 bg-white border border-gray-300 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">

@@ -1,42 +1,49 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { calendarService, CalendarEvent } from '../services/calendarService';
-import { format, startOfWeek, endOfWeek, eachDayOfInterval, addWeeks, subWeeks, isToday, parseISO, differenceInMinutes, isSameDay, startOfDay } from 'date-fns';
+import { format, startOfWeek, endOfWeek, eachDayOfInterval, addWeeks, subWeeks, isToday, parseISO, differenceInMinutes, startOfDay } from 'date-fns';
 import { ja } from 'date-fns/locale';
 
-// 時間帯の設定（表示する時間範囲）
-const START_HOUR = 7;
-const END_HOUR = 23;
-const HOUR_HEIGHT = 48; // 1時間あたりのピクセル高さ
+// 時間帯の設定
+const START_HOUR = 6;
+const END_HOUR = 24;
+const HOUR_HEIGHT = 60; // 1時間あたりのピクセル高さ
 
 export function CalendarView() {
   const [currentDate, setCurrentDate] = useState(new Date());
-  const [viewMode, setViewMode] = useState<'week' | 'list'>('week');
+  const [currentTime, setCurrentTime] = useState(new Date());
+
+  // 現在時刻を更新
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 60000);
+    return () => clearInterval(timer);
+  }, []);
 
   // 週の開始日と終了日を計算
   const weekStart = startOfWeek(currentDate, { weekStartsOn: 1 }); // 月曜始まり
   const weekEnd = endOfWeek(currentDate, { weekStartsOn: 1 });
   const daysOfWeek = eachDayOfInterval({ start: weekStart, end: weekEnd });
 
-  // イベントを取得（2週間分）
+  // イベントを取得（前後2週間分）
   const timeMin = subWeeks(weekStart, 1).toISOString();
-  const timeMax = addWeeks(weekEnd, 1).toISOString();
+  const timeMax = addWeeks(weekEnd, 2).toISOString();
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ['allEvents', timeMin, timeMax],
     queryFn: () => calendarService.getAllEvents(timeMin, timeMax),
-    refetchInterval: 60000, // 1分ごとに更新
+    refetchInterval: 60000,
   });
 
   const events = data?.events || [];
 
-  // イベントを日付ごとにグループ化（終日と時間指定を分離）
+  // イベントを日付ごとにグループ化
   const { allDayEventsByDate, timedEventsByDate } = useMemo(() => {
     const allDay: Record<string, CalendarEvent[]> = {};
     const timed: Record<string, CalendarEvent[]> = {};
 
     events.forEach(event => {
-      const dateKey = format(parseISO(event.start), 'yyyy-MM-dd');
+      const startDate = parseISO(event.start);
+      const dateKey = format(startDate, 'yyyy-MM-dd');
 
       if (event.allDay) {
         if (!allDay[dateKey]) allDay[dateKey] = [];
@@ -47,7 +54,7 @@ export function CalendarView() {
       }
     });
 
-    // 各日付内で時間順にソート
+    // 時間順にソート
     Object.values(timed).forEach(dayEvents => {
       dayEvents.sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
     });
@@ -55,37 +62,45 @@ export function CalendarView() {
     return { allDayEventsByDate: allDay, timedEventsByDate: timed };
   }, [events]);
 
+  // 週ナビゲーション
   const handlePrevWeek = () => setCurrentDate(subWeeks(currentDate, 1));
   const handleNextWeek = () => setCurrentDate(addWeeks(currentDate, 1));
   const handleToday = () => setCurrentDate(new Date());
 
-  const formatEventTime = (event: CalendarEvent) => {
-    if (event.allDay) return '終日';
-    return format(parseISO(event.start), 'HH:mm');
-  };
-
   // イベントの位置とサイズを計算
-  const getEventPosition = (event: CalendarEvent) => {
+  const getEventStyle = (event: CalendarEvent) => {
     const start = parseISO(event.start);
     const end = parseISO(event.end);
     const dayStart = startOfDay(start);
     dayStart.setHours(START_HOUR, 0, 0, 0);
 
     const startMinutes = differenceInMinutes(start, dayStart);
-    const duration = differenceInMinutes(end, start);
+    const duration = Math.max(30, differenceInMinutes(end, start)); // 最低30分表示
 
     const top = Math.max(0, (startMinutes / 60) * HOUR_HEIGHT);
-    const height = Math.max(20, (duration / 60) * HOUR_HEIGHT);
+    const height = Math.max(24, (duration / 60) * HOUR_HEIGHT - 2);
 
     return { top, height };
   };
 
+  // 現在時刻インジケーターの位置
+  const getCurrentTimePosition = () => {
+    const now = currentTime;
+    const hours = now.getHours();
+    const minutes = now.getMinutes();
+    const totalMinutes = (hours - START_HOUR) * 60 + minutes;
+    return Math.max(0, (totalMinutes / 60) * HOUR_HEIGHT);
+  };
+
+  // 時間ラベル配列
+  const hours = Array.from({ length: END_HOUR - START_HOUR }, (_, i) => START_HOUR + i);
+
   if (isLoading) {
     return (
-      <div className="bg-white shadow rounded-lg p-6">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
         <div className="flex items-center justify-center py-12">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-          <span className="ml-3 text-gray-600">イベントを読み込み中...</span>
+          <span className="ml-3 text-gray-600">カレンダーを読み込み中...</span>
         </div>
       </div>
     );
@@ -93,12 +108,12 @@ export function CalendarView() {
 
   if (error) {
     return (
-      <div className="bg-white shadow rounded-lg p-6">
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
         <div className="text-center py-8">
-          <p className="text-red-600 mb-4">イベントの取得に失敗しました</p>
+          <p className="text-red-600 mb-4">カレンダーの取得に失敗しました</p>
           <button
             onClick={() => refetch()}
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
           >
             再試行
           </button>
@@ -107,264 +122,219 @@ export function CalendarView() {
     );
   }
 
-  // 時間ラベル配列を生成
-  const hours = Array.from({ length: END_HOUR - START_HOUR }, (_, i) => START_HOUR + i);
-
   return (
-    <div className="bg-white shadow rounded-lg overflow-hidden">
+    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
       {/* ヘッダー */}
-      <div className="px-4 py-3 border-b border-gray-200 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <h2 className="text-lg font-semibold text-gray-900">カレンダー</h2>
-          <span className="text-sm text-gray-500">
-            {format(weekStart, 'M月d日', { locale: ja })} - {format(weekEnd, 'M月d日', { locale: ja })}
-          </span>
-        </div>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handlePrevWeek}
-            className="p-2 text-gray-600 hover:bg-gray-100 rounded-md"
-          >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
-          <button
-            onClick={handleToday}
-            className="px-3 py-1 text-sm font-medium text-blue-600 hover:bg-blue-50 rounded-md"
-          >
-            今日
-          </button>
-          <button
-            onClick={handleNextWeek}
-            className="p-2 text-gray-600 hover:bg-gray-100 rounded-md"
-          >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-            </svg>
-          </button>
-          <div className="ml-2 border-l border-gray-200 pl-2">
+      <div className="px-4 py-3 border-b border-gray-200 bg-gray-50">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <h2 className="text-xl font-bold text-gray-900">
+              {format(currentDate, 'yyyy年 M月', { locale: ja })}
+            </h2>
+            <span className="text-sm text-gray-500">
+              {format(weekStart, 'M/d', { locale: ja })} - {format(weekEnd, 'M/d', { locale: ja })}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
             <button
-              onClick={() => setViewMode('week')}
-              className={`px-3 py-1 text-sm rounded-md ${viewMode === 'week' ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`}
+              onClick={handlePrevWeek}
+              className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
+              title="前の週"
             >
-              週
+              <svg className="w-5 h-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
             </button>
             <button
-              onClick={() => setViewMode('list')}
-              className={`px-3 py-1 text-sm rounded-md ${viewMode === 'list' ? 'bg-blue-100 text-blue-700' : 'text-gray-600 hover:bg-gray-100'}`}
+              onClick={handleToday}
+              className="px-3 py-1.5 text-sm font-medium text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
             >
-              リスト
+              今日
+            </button>
+            <button
+              onClick={handleNextWeek}
+              className="p-2 hover:bg-gray-200 rounded-lg transition-colors"
+              title="次の週"
+            >
+              <svg className="w-5 h-5 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
             </button>
           </div>
         </div>
       </div>
 
-      {/* イベントがない場合 */}
-      {events.length === 0 && (
-        <div className="p-8 text-center">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-gray-100 rounded-full mb-4">
-            <svg className="w-8 h-8 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-          </div>
-          <p className="text-gray-500 mb-2">この期間にイベントはありません</p>
-          <p className="text-sm text-gray-400">同期ONのカレンダーのイベントが表示されます</p>
-        </div>
-      )}
+      {/* カレンダーグリッド */}
+      <div className="flex flex-col">
+        {/* 日付ヘッダー */}
+        <div className="flex border-b border-gray-200 sticky top-0 bg-white z-20">
+          <div className="w-14 flex-shrink-0"></div>
+          {daysOfWeek.map((day) => {
+            const isCurrentDay = isToday(day);
+            const dayOfWeek = format(day, 'E', { locale: ja });
+            const isWeekend = dayOfWeek === '土' || dayOfWeek === '日';
 
-      {/* 週表示 */}
-      {viewMode === 'week' && events.length > 0 && (
-        <div className="flex flex-col">
-          {/* 日付ヘッダー */}
-          <div className="flex border-b border-gray-200 sticky top-0 bg-white z-10">
-            <div className="w-16 flex-shrink-0 border-r border-gray-100"></div>
-            {daysOfWeek.map((day) => {
-              const isCurrentDay = isToday(day);
-              return (
-                <div
-                  key={day.toISOString()}
-                  className={`flex-1 text-center py-2 border-r border-gray-100 last:border-r-0 ${isCurrentDay ? 'bg-blue-50' : ''}`}
-                >
-                  <div className="text-xs text-gray-500">
-                    {format(day, 'E', { locale: ja })}
-                  </div>
-                  <div className={`text-lg font-semibold ${isCurrentDay ? 'text-blue-600 bg-blue-600 text-white rounded-full w-8 h-8 flex items-center justify-center mx-auto' : 'text-gray-900'}`}>
-                    {format(day, 'd')}
-                  </div>
+            return (
+              <div
+                key={day.toISOString()}
+                className={`flex-1 text-center py-2 border-l border-gray-100 ${isCurrentDay ? 'bg-blue-50' : ''}`}
+              >
+                <div className={`text-xs font-medium ${isWeekend ? 'text-red-500' : 'text-gray-500'}`}>
+                  {dayOfWeek}
                 </div>
-              );
-            })}
-          </div>
-
-          {/* 終日イベント行 */}
-          {Object.keys(allDayEventsByDate).length > 0 && (
-            <div className="flex border-b border-gray-200 bg-gray-50">
-              <div className="w-16 flex-shrink-0 border-r border-gray-100 text-xs text-gray-500 p-1 text-center">
-                終日
+                <div className={`text-lg font-semibold mt-0.5 ${
+                  isCurrentDay
+                    ? 'bg-blue-600 text-white rounded-full w-8 h-8 flex items-center justify-center mx-auto'
+                    : isWeekend ? 'text-red-500' : 'text-gray-900'
+                }`}>
+                  {format(day, 'd')}
+                </div>
               </div>
-              {daysOfWeek.map((day) => {
-                const dateKey = format(day, 'yyyy-MM-dd');
-                const dayAllDayEvents = allDayEventsByDate[dateKey] || [];
+            );
+          })}
+        </div>
 
-                return (
-                  <div key={dateKey} className="flex-1 border-r border-gray-100 last:border-r-0 p-1 min-h-[40px]">
-                    <div className="space-y-1">
-                      {dayAllDayEvents.slice(0, 3).map((event) => (
-                        <a
-                          key={event.id}
-                          href={event.htmlLink || '#'}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="block px-1 py-0.5 text-xs rounded truncate text-white font-medium"
-                          style={{ backgroundColor: event.calendarColor || '#4285f4' }}
-                          title={`${event.title}\n${event.calendarName || ''}`}
-                        >
-                          {event.title}
-                        </a>
-                      ))}
-                      {dayAllDayEvents.length > 3 && (
-                        <div className="text-xs text-gray-500 px-1">
-                          +{dayAllDayEvents.length - 3}件
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+        {/* 終日イベント */}
+        {Object.keys(allDayEventsByDate).some(key =>
+          daysOfWeek.some(day => format(day, 'yyyy-MM-dd') === key)
+        ) && (
+          <div className="flex border-b border-gray-200 bg-gray-50/50">
+            <div className="w-14 flex-shrink-0 text-[10px] text-gray-400 text-right pr-2 pt-1">
+              終日
             </div>
-          )}
-
-          {/* 時間グリッド */}
-          <div className="flex overflow-y-auto" style={{ maxHeight: '600px' }}>
-            {/* 時間ラベル列 */}
-            <div className="w-16 flex-shrink-0 border-r border-gray-100">
-              {hours.map((hour) => (
-                <div key={hour} className="relative" style={{ height: HOUR_HEIGHT }}>
-                  <span className="absolute -top-2 right-2 text-xs text-gray-400">
-                    {hour.toString().padStart(2, '0')}:00
-                  </span>
-                </div>
-              ))}
-            </div>
-
-            {/* 各日のカラム */}
             {daysOfWeek.map((day) => {
               const dateKey = format(day, 'yyyy-MM-dd');
-              const dayTimedEvents = timedEventsByDate[dateKey] || [];
-              const isCurrentDay = isToday(day);
+              const dayAllDayEvents = allDayEventsByDate[dateKey] || [];
 
               return (
-                <div
-                  key={dateKey}
-                  className={`flex-1 border-r border-gray-100 last:border-r-0 relative ${isCurrentDay ? 'bg-blue-50/30' : ''}`}
-                >
-                  {/* 時間グリッド線 */}
-                  {hours.map((hour) => (
-                    <div
-                      key={hour}
-                      className="border-b border-gray-100"
-                      style={{ height: HOUR_HEIGHT }}
-                    />
-                  ))}
-
-                  {/* イベント */}
-                  {dayTimedEvents.map((event) => {
-                    const { top, height } = getEventPosition(event);
-                    return (
+                <div key={dateKey} className="flex-1 border-l border-gray-100 p-0.5 min-h-[32px]">
+                  <div className="space-y-0.5">
+                    {dayAllDayEvents.slice(0, 3).map((event) => (
                       <a
                         key={event.id}
                         href={event.htmlLink || '#'}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="absolute left-0 right-1 mx-0.5 p-1 text-xs rounded overflow-hidden cursor-pointer hover:opacity-90 transition-opacity"
-                        style={{
-                          top: `${top}px`,
-                          height: `${height}px`,
-                          backgroundColor: event.calendarColor || '#4285f4',
-                          color: 'white',
-                          minHeight: '20px',
-                        }}
-                        title={`${event.title}\n${formatEventTime(event)} - ${format(parseISO(event.end), 'HH:mm')}\n${event.calendarName || ''}`}
+                        className="block px-1.5 py-0.5 text-[11px] rounded truncate text-white font-medium hover:opacity-80 transition-opacity"
+                        style={{ backgroundColor: event.calendarColor || '#4285f4' }}
+                        title={event.title}
                       >
-                        <div className="font-medium truncate">{event.title}</div>
-                        {height > 30 && (
-                          <div className="text-white/80 truncate">
-                            {formatEventTime(event)}
-                          </div>
-                        )}
+                        {event.title}
                       </a>
-                    );
-                  })}
+                    ))}
+                    {dayAllDayEvents.length > 3 && (
+                      <div className="text-[10px] text-gray-500 px-1">
+                        +{dayAllDayEvents.length - 3}件
+                      </div>
+                    )}
+                  </div>
                 </div>
               );
             })}
           </div>
-        </div>
-      )}
+        )}
 
-      {/* リスト表示 */}
-      {viewMode === 'list' && events.length > 0 && (
-        <div className="divide-y divide-gray-100">
+        {/* 時間グリッド */}
+        <div className="flex overflow-y-auto relative" style={{ height: '700px' }}>
+          {/* 時間ラベル列 */}
+          <div className="w-14 flex-shrink-0 relative">
+            {hours.map((hour) => (
+              <div key={hour} className="relative" style={{ height: HOUR_HEIGHT }}>
+                <span className="absolute -top-2.5 right-2 text-[11px] text-gray-400 font-medium">
+                  {hour.toString().padStart(2, '0')}:00
+                </span>
+              </div>
+            ))}
+          </div>
+
+          {/* 各日のカラム */}
           {daysOfWeek.map((day) => {
             const dateKey = format(day, 'yyyy-MM-dd');
-            const dayAllDayEvents = allDayEventsByDate[dateKey] || [];
             const dayTimedEvents = timedEventsByDate[dateKey] || [];
-            const allDayEvents = [...dayAllDayEvents, ...dayTimedEvents];
             const isCurrentDay = isToday(day);
 
-            if (allDayEvents.length === 0) return null;
-
             return (
-              <div key={dateKey}>
-                {/* 日付ヘッダー */}
-                <div className={`px-4 py-2 sticky top-0 ${isCurrentDay ? 'bg-blue-50' : 'bg-gray-50'}`}>
-                  <span className={`font-medium ${isCurrentDay ? 'text-blue-600' : 'text-gray-900'}`}>
-                    {format(day, 'M月d日(E)', { locale: ja })}
-                  </span>
-                  {isCurrentDay && <span className="ml-2 text-xs text-blue-600">今日</span>}
-                </div>
-                {/* イベントリスト */}
-                <ul className="divide-y divide-gray-50">
-                  {allDayEvents.map((event) => (
-                    <li key={event.id}>
-                      <a
-                        href={event.htmlLink || '#'}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-start gap-3 px-4 py-3 hover:bg-gray-50 transition-colors"
-                      >
+              <div
+                key={dateKey}
+                className={`flex-1 border-l border-gray-100 relative ${isCurrentDay ? 'bg-blue-50/20' : ''}`}
+              >
+                {/* 時間グリッド線 */}
+                {hours.map((hour) => (
+                  <div
+                    key={hour}
+                    className="border-b border-gray-100"
+                    style={{ height: HOUR_HEIGHT }}
+                  >
+                    {/* 30分の点線 */}
+                    <div className="border-b border-dashed border-gray-50" style={{ height: HOUR_HEIGHT / 2 }}></div>
+                  </div>
+                ))}
+
+                {/* 現在時刻インジケーター */}
+                {isCurrentDay && (
+                  <div
+                    className="absolute left-0 right-0 z-10 pointer-events-none"
+                    style={{ top: getCurrentTimePosition() }}
+                  >
+                    <div className="flex items-center">
+                      <div className="w-2 h-2 rounded-full bg-red-500 -ml-1"></div>
+                      <div className="flex-1 h-0.5 bg-red-500"></div>
+                    </div>
+                  </div>
+                )}
+
+                {/* イベント */}
+                {dayTimedEvents.map((event, idx) => {
+                  const { top, height } = getEventStyle(event);
+                  const startTime = format(parseISO(event.start), 'HH:mm');
+
+                  return (
+                    <a
+                      key={`${event.id}-${idx}`}
+                      href={event.htmlLink || '#'}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="absolute left-0.5 right-0.5 rounded-md overflow-hidden cursor-pointer hover:brightness-95 transition-all shadow-sm border-l-2"
+                      style={{
+                        top: `${top}px`,
+                        height: `${height}px`,
+                        backgroundColor: `${event.calendarColor || '#4285f4'}20`,
+                        borderLeftColor: event.calendarColor || '#4285f4',
+                      }}
+                      title={`${event.title}\n${startTime} - ${format(parseISO(event.end), 'HH:mm')}\n${event.calendarName || ''}`}
+                    >
+                      <div className="p-1 h-full overflow-hidden">
                         <div
-                          className="w-1 h-12 rounded-full flex-shrink-0"
-                          style={{ backgroundColor: event.calendarColor || '#4285f4' }}
-                        />
-                        <div className="flex-1 min-w-0">
-                          <div className="font-medium text-gray-900">{event.title}</div>
-                          <div className="text-sm text-gray-500 flex items-center gap-2">
-                            <span>{formatEventTime(event)}</span>
-                            {event.calendarName && (
-                              <>
-                                <span className="text-gray-300">|</span>
-                                <span className="truncate">{event.calendarName}</span>
-                              </>
-                            )}
-                          </div>
-                          {event.location && (
-                            <div className="text-sm text-gray-400 truncate mt-1">
-                              📍 {event.location}
-                            </div>
-                          )}
+                          className="text-[11px] font-semibold truncate"
+                          style={{ color: event.calendarColor || '#4285f4' }}
+                        >
+                          {event.title}
                         </div>
-                        <svg className="w-4 h-4 text-gray-400 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                        </svg>
-                      </a>
-                    </li>
-                  ))}
-                </ul>
+                        {height > 32 && (
+                          <div className="text-[10px] text-gray-600 truncate">
+                            {startTime}
+                          </div>
+                        )}
+                      </div>
+                    </a>
+                  );
+                })}
               </div>
             );
           })}
+        </div>
+      </div>
+
+      {/* イベントがない場合のメッセージ */}
+      {events.length === 0 && (
+        <div className="absolute inset-0 flex items-center justify-center bg-white/80">
+          <div className="text-center">
+            <svg className="w-12 h-12 text-gray-300 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            <p className="text-gray-500 font-medium">イベントがありません</p>
+            <p className="text-sm text-gray-400 mt-1">同期ONのカレンダーのイベントが表示されます</p>
+          </div>
         </div>
       )}
     </div>

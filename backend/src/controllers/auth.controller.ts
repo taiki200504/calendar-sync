@@ -204,19 +204,29 @@ authRouter.get('/google/callback', async (req: Request, res: Response) => {
     // アカウント追加モードの場合、新しいアカウントを元のアカウントと同じsupabase_user_idでリンク
     if (savedState.add_account_mode && savedState.original_account_id) {
       const originalAccount = await accountModel.findById(savedState.original_account_id);
-      if (originalAccount && originalAccount.supabase_user_id) {
+      if (originalAccount) {
+        let linkingUserId = originalAccount.supabase_user_id;
+
+        // 元のアカウントにsupabase_user_idがない場合、新しいUUIDを生成して設定
+        if (!linkingUserId) {
+          linkingUserId = crypto.randomUUID();
+          await accountModel.update(savedState.original_account_id, {
+            supabase_user_id: linkingUserId
+          });
+          logger.info('Generated new supabase_user_id for original account', {
+            originalAccountId: savedState.original_account_id,
+            supabaseUserId: linkingUserId
+          });
+        }
+
         // 新しいアカウントに同じsupabase_user_idを設定してリンク
         await accountModel.update(account.id, {
-          supabase_user_id: originalAccount.supabase_user_id
+          supabase_user_id: linkingUserId
         });
         logger.info('New account linked to original account via supabase_user_id', {
           newAccountId: account.id,
           originalAccountId: savedState.original_account_id,
-          supabaseUserId: originalAccount.supabase_user_id
-        });
-      } else {
-        logger.warn('Original account does not have supabase_user_id, cannot link accounts', {
-          originalAccountId: savedState.original_account_id
+          supabaseUserId: linkingUserId
         });
       }
     }
