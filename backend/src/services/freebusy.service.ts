@@ -1,10 +1,11 @@
 import { google } from 'googleapis';
 import { oauthService } from './oauth.service';
 import { calendarModel } from '../models/calendarModel';
+import { accountModel } from '../models/accountModel';
 
 // 型定義
 export interface FreeBusySearchParams {
-  accountIds: string[];
+  accountIds: string[]; // これはカレンダーID（UUID）の配列
   startDate: Date;
   endDate: Date;
   duration: number; // 分
@@ -48,23 +49,44 @@ class FreeBusyService {
     accountId: string,
     params: FreeBusySearchParams
   ): Promise<FreeSlot[]> {
-    // a. 対象カレンダーIDを取得
-    const calendarIds = await this.getCalendarIds(accountId, params.accountIds);
-    if (calendarIds.length === 0) {
+    // a. 全アカウントのカレンダーを取得して、指定されたカレンダーIDに対応するGoogleカレンダーIDを取得
+    const accountIds = await accountModel.findAccountIdsForCurrentUser(accountId);
+    const calendarInfo = await this.getCalendarInfoForAllAccounts(accountIds, params.accountIds);
+
+    if (calendarInfo.length === 0) {
       throw new Error('No valid calendars found');
     }
 
-    // oauthServiceを使用して認証済みクライアントを取得（自動リフレッシュ対応）
-    const auth = await oauthService.getAuthenticatedClient(accountId);
-    const calendarApi = google.calendar({ version: 'v3', auth });
+    // b. 各アカウントごとにGoogle FreeBusy APIでbusy区間を取得
+    let allBusySlots: BusySlot[] = [];
 
-    // b. Google FreeBusy APIでbusy区間を取得
-    const busySlots = await this.fetchBusySlots(
-      calendarApi,
-      calendarIds,
-      params.startDate,
-      params.endDate
-    );
+    // アカウントごとにグループ化
+    const calendarsByAccount = new Map<string, string[]>();
+    for (const info of calendarInfo) {
+      const existing = calendarsByAccount.get(info.accountId) || [];
+      existing.push(info.gcalCalendarId);
+      calendarsByAccount.set(info.accountId, existing);
+    }
+
+    // 各アカウントからbusy区間を取得
+    for (const [accId, gcalIds] of calendarsByAccount) {
+      try {
+        const auth = await oauthService.getAuthenticatedClient(accId);
+        const calendarApi = google.calendar({ version: 'v3', auth });
+        const busySlots = await this.fetchBusySlots(
+          calendarApi,
+          gcalIds,
+          params.startDate,
+          params.endDate
+        );
+        allBusySlots = allBusySlots.concat(busySlots);
+      } catch (err) {
+        console.error(`Failed to fetch busy slots for account ${accId}:`, err);
+        // エラーが発生しても他のアカウントの処理を続ける
+      }
+    }
+
+    const busySlots = allBusySlots;
 
     // c. mergeBusySlots()でbusy区間をマージ
     const mergedBusy = this.mergeBusySlots(busySlots);
@@ -102,7 +124,31 @@ class FreeBusyService {
   }
 
   /**
-   * accountIds（UUID）からカレンダーIDを取得
+   * 全アカウントのカレンダーから、指定されたカレンダーUUIDに対応する情報を取得
+   */
+  private async getCalendarInfoForAllAccounts(
+    accountIds: string[],
+    calendarUuids: string[]
+  ): Promise<{ calendarId: string; gcalCalendarId: string; accountId: string }[]> {
+    const calendars = await calendarModel.findByAccountIds(accountIds);
+    const result: { calendarId: string; gcalCalendarId: string; accountId: string }[] = [];
+
+    for (const cal of calendars) {
+      if (calendarUuids.includes(cal.id)) {
+        result.push({
+          calendarId: cal.id,
+          gcalCalendarId: cal.gcal_calendar_id,
+          accountId: cal.account_id
+        });
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * accountIds（UUID）からカレンダーIDを取得（後方互換性のため残す）
+   * @deprecated Use getCalendarInfoForAllAccounts instead
    */
   private async getCalendarIds(
     accountId: string,
