@@ -5,6 +5,7 @@ import { SyncStatus } from '../components/SyncStatus';
 import { DashboardCalendarList } from '../components/DashboardCalendarList';
 import { SyncConnections } from '../components/SyncConnections';
 import { SyncLog } from '../components/SyncLog';
+import { CalendarView } from '../components/CalendarView';
 import { calendarService } from '../services/calendarService';
 import { syncService } from '../services/syncService';
 import { accountService, Account } from '../services/accountService';
@@ -14,7 +15,7 @@ type SetupStep = 'account' | 'calendars' | 'connections' | 'done';
 
 export function Dashboard() {
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<'overview' | 'calendars' | 'connections' | 'logs'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'calendar' | 'settings' | 'connections' | 'logs'>('overview');
 
   const { data: calendarsData, isLoading: calendarsLoading } = useQuery({
     queryKey: ['calendars'],
@@ -264,7 +265,8 @@ export function Dashboard() {
         <nav className="-mb-px flex space-x-8 overflow-x-auto">
           {[
             { key: 'overview', label: '概要' },
-            { key: 'calendars', label: 'カレンダー' },
+            { key: 'calendar', label: 'カレンダー' },
+            { key: 'settings', label: '設定' },
             { key: 'connections', label: '同期接続' },
             { key: 'logs', label: 'ログ' },
           ].map((tab) => (
@@ -287,11 +289,12 @@ export function Dashboard() {
       <div className="mt-6 space-y-6">
         {activeTab === 'overview' && (
           <>
+            <CalendarView />
             <AccountList />
-            <DashboardCalendarList />
           </>
         )}
-        {activeTab === 'calendars' && <DashboardCalendarList />}
+        {activeTab === 'calendar' && <CalendarView />}
+        {activeTab === 'settings' && <DashboardCalendarList />}
         {activeTab === 'connections' && <SyncConnections />}
         {activeTab === 'logs' && <SyncLog />}
       </div>
