@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { accountModel } from '../models/accountModel';
-import { authenticateToken } from '../middleware/auth';
+import { authenticateToken, AuthRequest } from '../middleware/auth';
 
 export const accountRouter = Router();
 
@@ -9,18 +9,33 @@ accountRouter.use(authenticateToken);
 
 /**
  * GET /api/accounts
- * 現在のユーザーのアカウント一覧を返す
+ * 現在のユーザーに紐づく全アカウント一覧を返す（複数アカウント対応）
  */
 accountRouter.get('/', async (req: Request, res: Response) => {
   try {
-    const userId = (req as any).userId;
-    
-    // 現在の認証システムではuserIdが設定されているが、
-    // 新しいスキーマではaccountsテーブルにuser_idカラムがない
-    // 一時的に、すべてのアカウントを返す
-    // TODO: 認証システムを更新してaccountIdを設定するか、userIdとaccountIdの関連付けを実装
-    const accounts = await accountModel.findByUserId(userId);
-    
+    const accountId = (req as AuthRequest).accountId;
+    if (!accountId) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    // 同一ユーザーに紐づく全アカウントIDを取得
+    const accountIds = await accountModel.findAccountIdsForCurrentUser(accountId);
+
+    // 各アカウントの情報を取得
+    const accounts = [];
+    for (const id of accountIds) {
+      const account = await accountModel.findById(id);
+      if (account) {
+        accounts.push({
+          id: account.id,
+          email: account.email,
+          provider: account.provider,
+          workspace_flag: account.workspace_flag,
+          created_at: account.created_at,
+        });
+      }
+    }
+
     return res.json({ accounts });
   } catch (error: any) {
     console.error('Error fetching accounts:', error);
