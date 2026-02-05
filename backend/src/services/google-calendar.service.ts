@@ -188,6 +188,58 @@ class GoogleCalendarService {
   }
 
   /**
+   * 指定期間内のイベントを取得（カレンダービュー用）
+   * timeMin/timeMax で期間を指定し、その期間内に存在するイベントを返す
+   */
+  async listEventsInRange(
+    calendarId: string,
+    timeMin: Date,
+    timeMax: Date,
+    accountId: string
+  ): Promise<GoogleEvent[]> {
+    const { calendarApi, calendar } = await this.getCalendarApi(accountId, calendarId);
+    if (!calendar) {
+      throw new Error('Calendar not found');
+    }
+
+    const params: calendar_v3.Params$Resource$Events$List = {
+      calendarId: calendar.gcal_calendar_id,
+      timeMin: timeMin.toISOString(),
+      timeMax: timeMax.toISOString(),
+      maxResults: 2500,
+      singleEvents: true,
+      orderBy: 'startTime',
+    };
+
+    try {
+      const allItems: GoogleEvent[] = [];
+      let pageToken: string | undefined;
+
+      do {
+        const response = await calendarApi.events.list({
+          ...params,
+          pageToken,
+        });
+        const items = response.data.items || [];
+        allItems.push(...items);
+        pageToken = response.data.nextPageToken || undefined;
+      } while (pageToken);
+
+      return allItems;
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error('Failed to list events in range from Google Calendar', {
+        error: errorMessage,
+        calendarId,
+        accountId,
+        timeMin: timeMin.toISOString(),
+        timeMax: timeMax.toISOString(),
+      });
+      throw error;
+    }
+  }
+
+  /**
    * イベントを更新
    * @param calendarId カレンダーID（UUID）
    * @param eventId イベントID（Google Calendar Event ID）
