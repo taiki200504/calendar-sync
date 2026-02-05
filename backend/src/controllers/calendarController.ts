@@ -161,23 +161,21 @@ calendarRouter.get('/all/events', async (req: Request, res: Response) => {
       }
     }
 
-    // 各カレンダーからイベントを取得
+    // 各カレンダーからイベントを取得（timeMin/timeMaxで期間指定）
     const allEvents: any[] = [];
     for (const calendar of enabledCalendars) {
       try {
         const cal = calendar as any; // JOINで取得した追加フィールドにアクセスするため
-        const events = await googleCalendarService.listEvents(cal.id, startDate, cal.account_id);
+        const events = await googleCalendarService.listEventsInRange(cal.id, startDate, endDate, cal.account_id);
 
         // カレンダーの色を取得（なければデフォルト色）
         const calColor = calendarColors.get(cal.gcal_calendar_id) || '#4285f4';
 
-        // 期間内のイベントのみフィルタリングしてフォーマット
-        const filteredEvents = events
+        // フォーマット（listEventsInRangeが既に期間フィルタリング済み）
+        const formattedEvents = events
           .filter(event => {
             const eventStart = event.start?.dateTime || event.start?.date;
-            if (!eventStart) return false;
-            const start = new Date(eventStart);
-            return start >= startDate && start <= endDate;
+            return !!eventStart;
           })
           .map(event => ({
             id: event.id,
@@ -196,7 +194,7 @@ calendarRouter.get('/all/events', async (req: Request, res: Response) => {
             htmlLink: event.htmlLink,
           }));
 
-        allEvents.push(...filteredEvents);
+        allEvents.push(...formattedEvents);
       } catch (err) {
         console.error(`Failed to fetch events for calendar ${calendar.id}:`, err);
         // エラーが発生しても他のカレンダーの取得を続ける
@@ -348,5 +346,109 @@ calendarRouter.post('/:calendarId/events', async (req: Request, res: Response) =
   } catch (error: any) {
     console.error('Error creating event:', error);
     return res.status(500).json({ error: 'Failed to create event', message: error.message });
+  }
+});
+
+/**
+ * PATCH /api/calendars/:calendarId/events/:eventId
+ * イベントを更新
+ * body: { title?, start_at?, end_at?, location?, description? }
+ */
+calendarRouter.patch('/:calendarId/events/:eventId', async (req: Request, res: Response) => {
+  try {
+    const accountId = (req as AuthRequest).accountId;
+    if (!accountId) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    const { calendarId, eventId } = req.params;
+    const { title, start_at, end_at, location, description } = req.body;
+
+    const calendar = await calendarModel.findById(calendarId);
+    if (!calendar) {
+      return res.status(404).json({ error: 'Calendar not found' });
+    }
+
+    const allowedIds = await accountModel.findAccountIdsForCurrentUser(accountId);
+    if (!allowedIds.includes(calendar.account_id)) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const eventData: any = {};
+    if (title !== undefined) eventData.summary = title;
+    if (description !== undefined) eventData.description = description;
+    if (location !== undefined) eventData.location = location;
+    if (start_at) {
+      eventData.start = { dateTime: new Date(start_at).toISOString(), timeZone: 'UTC' };
+    }
+    if (end_at) {
+      eventData.end = { dateTime: new Date(end_at).toISOString(), timeZone: 'UTC' };
+    }
+
+    const googleEvent = await googleCalendarService.updateEvent(
+      calendarId,
+      eventId,
+      eventData,
+      calendar.account_id
+    );
+
+    return res.json({
+      message: 'Event updated successfully',
+      event: {
+        id: googleEvent.id,
+        title: googleEvent.summary,
+        start: googleEvent.start?.dateTime || googleEvent.start?.date,
+        end: googleEvent.end?.dateTime || googleEvent.end?.date,
+        location: googleEvent.location,
+        description: googleEvent.description,
+      },
+    });
+  } catch (error: any) {
+    console.error('Error updating event:', error);
+    return res.status(500).json({ error: 'Failed to update event', message: error.message });
+  }
+});
+
+/**
+ * DELETE /api/calendars/:calendarId/events/:eventId
+ * イベントを削除
+ */
+calendarRouter.delete('/:calendarId/events/:eventId', async (req: Request, res: Response) => {
+  try {
+    const accountId = (req as AuthRequest).accountId;
+    if (!accountId) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+
+    const { calendarId, eventId } = req.params;
+
+    const calendar = await calendarModel.findById(calendarId);
+    if (!calendar) {
+      return res.status(404).json({ error: 'Calendar not found' });
+    }
+
+    const allowedIds = await accountModel.findAccountIdsForCurrentUser(accountId);
+    if (!allowedIds.includes(calendar.account_id)) {
+      return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const { calendarApi, calendar: cal } = await (async () => {
+      const cal = await calendarModel.findById(calendarId);
+      if (!cal) throw new Error('Calendar not found');
+      const auth = await (await import('../services/oauth.service')).oauthService.getAuthenticatedClient(calendar.account_id);
+      const { google } = await import('googleapis');
+      const calendarApi = google.calendar({ version: 'v3', auth });
+      return { calendarApi, calendar: cal };
+    })();
+
+    await calendarApi.events.delete({
+      calendarId: cal.gcal_calendar_id,
+      eventId,
+    });
+
+    return res.json({ message: 'Event deleted successfully' });
+  } catch (error: any) {
+    console.error('Error deleting event:', error);
+    return res.status(500).json({ error: 'Failed to delete event', message: error.message });
   }
 });

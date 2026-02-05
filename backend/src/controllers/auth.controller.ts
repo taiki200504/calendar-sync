@@ -203,31 +203,49 @@ authRouter.get('/google/callback', async (req: Request, res: Response) => {
 
     // アカウント追加モードの場合、新しいアカウントを元のアカウントと同じsupabase_user_idでリンク
     if (savedState.add_account_mode && savedState.original_account_id) {
-      const originalAccount = await accountModel.findById(savedState.original_account_id);
-      if (originalAccount) {
-        let linkingUserId = originalAccount.supabase_user_id;
+      try {
+        const originalAccount = await accountModel.findById(savedState.original_account_id);
+        if (originalAccount) {
+          let linkingUserId = originalAccount.supabase_user_id;
 
-        // 元のアカウントにsupabase_user_idがない場合、新しいUUIDを生成して設定
-        if (!linkingUserId) {
-          linkingUserId = crypto.randomUUID();
-          await accountModel.update(savedState.original_account_id, {
+          // 元のアカウントにsupabase_user_idがない場合、新しいUUIDを生成して設定
+          if (!linkingUserId) {
+            linkingUserId = crypto.randomUUID();
+            await accountModel.update(savedState.original_account_id, {
+              supabase_user_id: linkingUserId
+            });
+            logger.info('Generated new supabase_user_id for original account', {
+              originalAccountId: savedState.original_account_id,
+              supabaseUserId: linkingUserId
+            });
+          }
+
+          // 新しいアカウントに同じsupabase_user_idを設定してリンク
+          await accountModel.update(account.id, {
             supabase_user_id: linkingUserId
           });
-          logger.info('Generated new supabase_user_id for original account', {
+          logger.info('New account linked to original account via supabase_user_id', {
+            newAccountId: account.id,
             originalAccountId: savedState.original_account_id,
             supabaseUserId: linkingUserId
           });
         }
-
-        // 新しいアカウントに同じsupabase_user_idを設定してリンク
-        await accountModel.update(account.id, {
-          supabase_user_id: linkingUserId
-        });
-        logger.info('New account linked to original account via supabase_user_id', {
-          newAccountId: account.id,
-          originalAccountId: savedState.original_account_id,
-          supabaseUserId: linkingUserId
-        });
+      } catch (linkError: any) {
+        // UNIQUE制約違反の場合はログを出して続行（マイグレーション未適用時の対策）
+        if (linkError.code === '23505' || linkError.message?.includes('unique constraint')) {
+          logger.warn('Account linking failed due to unique constraint - run migration 1769500000 to fix', {
+            newAccountId: account.id,
+            originalAccountId: savedState.original_account_id,
+            error: linkError.message
+          });
+        } else {
+          logger.error('Account linking failed', {
+            newAccountId: account.id,
+            originalAccountId: savedState.original_account_id,
+            error: linkError.message
+          });
+        }
+        // リンク失敗してもログイン自体は成功させる
       }
     }
 

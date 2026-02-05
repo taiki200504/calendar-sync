@@ -66,6 +66,23 @@ export const calendarService = {
     if (timeMax) params.append('timeMax', timeMax);
     const response = await api.get(`/calendars/all/events?${params.toString()}`);
     return response.data;
+  },
+
+  /** イベントを更新 */
+  async updateEvent(calendarId: string, eventId: string, data: {
+    title?: string;
+    start_at?: string;
+    end_at?: string;
+    location?: string;
+    description?: string;
+  }): Promise<{ event: any }> {
+    const response = await api.patch(`/calendars/${calendarId}/events/${eventId}`, data);
+    return response.data;
+  },
+
+  /** イベントを削除 */
+  async deleteEvent(calendarId: string, eventId: string): Promise<void> {
+    await api.delete(`/calendars/${calendarId}/events/${eventId}`);
   }
 };
 
