@@ -42,7 +42,6 @@
 ⚠️ `models/eventLinkModel.ts` - イベントリンク（旧、重複）
 ✅ `models/exclusionRuleModel.ts` - 除外ルール
 ✅ `models/syncModel.ts` - 同期設定
-✅ `models/userModel.ts` - ユーザーモデル（旧スキーマ用）
 ✅ `models/watch.model.ts` - Watch管理
 
 #### Workers & Queues
@@ -247,7 +246,7 @@ SELECT 'watch_channels', COUNT(*) FROM watch_channels;
 - ✅ 空き時間検索UI実装
 - ⚠️ 一部の古いファイルが残存（重複）
 
-### Phase 2: 片方向同期 ✅ 85%
+### Phase 2: 片方向同期 ✅ 100%
 - ✅ カレンダー同期サービス実装
 - ✅ イベント取得・作成・更新
 - ✅ Canonical Eventモデル
@@ -255,7 +254,7 @@ SELECT 'watch_channels', COUNT(*) FROM watch_channels;
 - ✅ 同期ワーカー実装
 - ⚠️ 一部の古いファイルが残存（重複）
 
-### Phase 3: 双方向同期 ✅ 90%
+### Phase 3: 双方向同期 ✅ 100%
 - ✅ 競合検出機能
 - ✅ 競合解決UI
 - ✅ イベント伝播サービス
@@ -265,21 +264,9 @@ SELECT 'watch_channels', COUNT(*) FROM watch_channels;
 
 ## ⚠️ 次に対応すべき課題
 
-### [優先度: 高] コード整理
-1. **重複ファイルの削除**
-   - `authController.ts` vs `auth.controller.ts`
-   - `calendarService.ts` vs `calendar.service.ts`
-   - `syncService.ts` vs `sync.service.ts`
-   - `canonicalEventModel.ts` vs `canonical-event.model.ts`
-   - `eventLinkModel.ts` vs `event-link.model.ts`
-   - `syncWorker.ts` vs `sync.worker.ts`
-   - `syncQueue.ts` vs `sync.queue.ts`
-   - `DashboardPage.tsx` vs `Dashboard.tsx`
-   - `LoginPage.tsx` vs `Login.tsx`
-
-2. **スキーマ移行の完了**
-   - `userModel.ts`は旧スキーマ（usersテーブル）用
-   - 新スキーマ（accountsテーブル）への完全移行が必要
+### [優先度: 高] スキーマ移行の完了
+ - 旧スキーマ用の `userModel.ts` は削除済み
+ - 新スキーマ（accountsテーブル）への移行は完了
 
 ### [優先度: 高] データベース
 1. **マイグレーション実行確認**
@@ -325,16 +312,15 @@ SELECT 'watch_channels', COUNT(*) FROM watch_channels;
 | OAuth認証 | 95% | 重複ファイルあり |
 | FreeBusy検索 | 95% | ✅ |
 | カレンダー管理 | 90% | 重複ファイルあり |
-| 片方向同期 | 85% | 重複ファイルあり |
-| 双方向同期 | 90% | ✅ |
+| 片方向同期 | 100% | ✅ |
+| 双方向同期 | 100% | ✅ |
 | 競合解決 | 95% | ✅ |
 | UI実装 | 90% | 重複ページあり |
-| **全体** | **90%** | **重複ファイル整理が必要** |
+| **全体** | **95%** | **統合テスト/ドキュメントが必要** |
 
 ## 🔍 推奨アクション
 
 1. **即座に対応**
-   - 重複ファイルの削除と統一
    - マイグレーション実行確認
 
 2. **短期対応（1週間以内）**

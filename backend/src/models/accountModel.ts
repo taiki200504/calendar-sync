@@ -50,15 +50,18 @@ class AccountModel {
     return result.rows.map((r) => r.id);
   }
 
-  async findByUserId(_userId: number): Promise<Account[]> {
-    // ユーザーIDからアカウントを取得するロジック
-    // 現在の認証システムではuserIdがJWTに含まれているが、
-    // 新しいスキーマではaccountsテーブルにuser_idカラムがない
-    // 一時的に、すべてのアカウントを返すか、別の方法で関連付けが必要
-    // ここでは、認証ミドルウェアでaccountIdを設定することを想定
+  async findByIds(ids: string[]): Promise<Account[]> {
+    if (ids.length === 0) {
+      return [];
+    }
+
     const result = await db.query<Account>(
-      'SELECT * FROM accounts ORDER BY created_at DESC'
+      `SELECT * FROM accounts
+       WHERE id = ANY($1::uuid[])
+       ORDER BY created_at DESC`,
+      [ids]
     );
+
     return result.rows;
   }
 

@@ -50,9 +50,9 @@ accountRouter.get('/', async (req: Request, res: Response) => {
 accountRouter.delete('/:id', async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    
+
     await accountModel.delete(id);
-    
+
     return res.json({ message: 'Account deleted successfully' });
   } catch (error: any) {
     console.error('Error deleting account:', error);

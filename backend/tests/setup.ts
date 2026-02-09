@@ -18,3 +18,17 @@ global.console = {
   warn: jest.fn(),
   error: jest.fn(),
 };
+
+jest.mock('ioredis', () => {
+  return jest.fn().mockImplementation(() => ({
+    on: jest.fn(),
+    quit: jest.fn(),
+    disconnect: jest.fn()
+  }));
+});
+
+jest.mock('bullmq', () => ({
+  Queue: jest.fn().mockImplementation(() => ({
+    add: jest.fn()
+  }))
+}));

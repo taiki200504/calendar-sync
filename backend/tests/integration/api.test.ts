@@ -1,16 +1,15 @@
-import request from 'supertest';
 import express from 'express';
 import { accountRouter } from '../../src/controllers/account.controller';
 import { calendarRouter } from '../../src/controllers/calendarController';
 import { syncRouter } from '../../src/controllers/syncController';
 import { db } from '../../src/utils/database';
 import { syncQueue } from '../../src/queues/sync.queue';
+import { createTestClient } from '../utils/httpTestClient';
 
 // 認証ミドルウェアをモック
 jest.mock('../../src/middleware/auth', () => ({
   authenticateToken: jest.fn((req, _res, next) => {
     (req as any).accountId = 'test-account-id';
-    (req as any).userId = 1; // account.controller.tsがuserIdを使用しているため
     next();
   })
 }));
@@ -24,6 +23,8 @@ app.use(express.json());
 app.use('/api/accounts', accountRouter);
 app.use('/api/calendars', calendarRouter);
 app.use('/api/sync', syncRouter);
+
+const request = createTestClient(app);
 
 describe('API Integration Tests', () => {
   beforeEach(() => {
@@ -57,12 +58,17 @@ describe('API Integration Tests', () => {
         }
       ];
 
-      // accountModel.findByUserIdはdb.queryを使用しているため、dbをモック
-      (db.query as jest.Mock).mockResolvedValue({ rows: mockAccounts });
+      const mockSessionAccount = {
+        id: 'test-account-id',
+        supabase_user_id: null
+      };
 
-      const response = await request(app)
-        .get('/api/accounts')
-        .expect(200);
+      (db.query as jest.Mock)
+        .mockResolvedValueOnce({ rows: [mockSessionAccount] })
+        .mockResolvedValueOnce({ rows: mockAccounts });
+
+      const response = await request('GET', '/api/accounts');
+      expect(response.status).toBe(200);
 
       expect(response.body).toHaveProperty('accounts');
       expect(Array.isArray(response.body.accounts)).toBe(true);
@@ -92,9 +98,8 @@ describe('API Integration Tests', () => {
       // calendarModel.findAllはdb.queryを使用しているため、dbをモック
       (db.query as jest.Mock).mockResolvedValue({ rows: mockCalendars });
 
-      const response = await request(app)
-        .get('/api/calendars')
-        .expect(200);
+      const response = await request('GET', '/api/calendars');
+      expect(response.status).toBe(200);
 
       expect(response.body).toHaveProperty('calendars');
       expect(Array.isArray(response.body.calendars)).toBe(true);
@@ -123,10 +128,8 @@ describe('API Integration Tests', () => {
       (db.query as jest.Mock).mockResolvedValue({ rows: mockCalendars });
       (syncQueue.add as jest.Mock).mockResolvedValue({ id: 'job-1' });
 
-      const response = await request(app)
-        .post('/api/sync/manual')
-        .send({ calendarIds: [] })
-        .expect(200);
+      const response = await request('POST', '/api/sync/manual', { calendarIds: [] });
+      expect(response.status).toBe(200);
 
       expect(response.body).toHaveProperty('message');
       expect(response.body).toHaveProperty('calendarsQueued');
@@ -150,9 +153,8 @@ describe('API Integration Tests', () => {
 
       (db.query as jest.Mock).mockResolvedValue({ rows: mockLogs });
 
-      const response = await request(app)
-        .get('/api/sync/logs')
-        .expect(200);
+      const response = await request('GET', '/api/sync/logs');
+      expect(response.status).toBe(200);
 
       expect(response.body).toHaveProperty('logs');
       expect(Array.isArray(response.body.logs)).toBe(true);

@@ -40,6 +40,71 @@ describe('AccountModel', () => {
     });
   });
 
+  describe('findAccountIdsForCurrentUser', () => {
+    it('should return session account id if account not found', async () => {
+      (db.query as jest.Mock).mockResolvedValue({ rows: [] });
+
+      const result = await accountModel.findAccountIdsForCurrentUser('missing-id');
+
+      expect(result).toEqual(['missing-id']);
+    });
+
+    it('should return session account id if supabase_user_id is null', async () => {
+      const mockAccount = {
+        id: 'session-id',
+        supabase_user_id: null
+      };
+
+      (db.query as jest.Mock).mockResolvedValue({ rows: [mockAccount] });
+
+      const result = await accountModel.findAccountIdsForCurrentUser('session-id');
+
+      expect(result).toEqual(['session-id']);
+    });
+
+    it('should return all account ids for supabase user', async () => {
+      const mockAccount = {
+        id: 'session-id',
+        supabase_user_id: 'sb-user'
+      };
+      const mockIds = [{ id: 'a1' }, { id: 'a2' }];
+
+      (db.query as jest.Mock)
+        .mockResolvedValueOnce({ rows: [mockAccount] })
+        .mockResolvedValueOnce({ rows: mockIds });
+
+      const result = await accountModel.findAccountIdsForCurrentUser('session-id');
+
+      expect(result).toEqual(['a1', 'a2']);
+    });
+  });
+
+  describe('findByIds', () => {
+    it('should return empty array for empty input', async () => {
+      const result = await accountModel.findByIds([]);
+      expect(result).toEqual([]);
+    });
+
+    it('should return accounts for given ids', async () => {
+      const mockAccounts = [
+        { id: '1', email: 'test1@example.com' },
+        { id: '2', email: 'test2@example.com' }
+      ];
+
+      (db.query as jest.Mock).mockResolvedValue({ rows: mockAccounts });
+
+      const result = await accountModel.findByIds(['1', '2']);
+
+      expect(db.query).toHaveBeenCalledWith(
+        `SELECT * FROM accounts
+       WHERE id = ANY($1::uuid[])
+       ORDER BY created_at DESC`,
+        [['1', '2']]
+      );
+      expect(result).toEqual(mockAccounts);
+    });
+  });
+
   describe('create', () => {
     it('should create new account', async () => {
       const accountData = {

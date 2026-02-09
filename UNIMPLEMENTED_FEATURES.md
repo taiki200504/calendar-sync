@@ -50,19 +50,7 @@
   - 実装ファイル: `backend/src/utils/extended-properties.ts`, `backend/src/services/sync.service.ts` (isSelfReflection)
   - 状態: 完全実装済み（syncOpId、hash + タイムスタンプによる判定）
 
-### 🚧 部分実装
-- **片方向同期（A→B/C）**
-  - 実装ファイル: `backend/src/services/sync.service.ts`, `backend/src/services/propagation.service.ts`
-  - 状態: **伝播処理が未実装**
-  - 問題点:
-    - `sync.service.ts`の`upsertEvent()`メソッド（139行目）に「伝播はスキップ（Phase 3で実装）」というコメントあり
-    - `propagation.service.ts`は実装済みだが、`sync.service.ts`から呼び出されていない
-  - 必要修正:
-    - `backend/src/services/sync.service.ts`の`upsertEvent()`メソッドで、Canonical更新後に`propagationService.propagateEvent()`を呼び出す
-  - 実装見積もり: 1-2時間
-  - 依存: propagation.service.ts（実装済み）
-
-**Phase 2 進捗: 80% (4/5機能)**
+**Phase 2 進捗: 100% (5/5機能)**
 
 ---
 
@@ -97,21 +85,7 @@
   - 実装ファイル: `frontend/src/pages/Rules.tsx`, `frontend/src/pages/Rules/components/CalendarSettings.tsx`, `frontend/src/pages/Rules/components/ExclusionRules.tsx`
   - 状態: 完全実装済み（カレンダー設定、除外ルール）
 
-### 🚧 部分実装
-- **逆同期（B/C→A）**
-  - 実装ファイル: `backend/src/services/propagation.service.ts`, `backend/src/services/sync.service.ts`
-  - 状態: **伝播処理が未統合**
-  - 問題点:
-    - `propagation.service.ts`は実装済みだが、`sync.service.ts`の`upsertEvent()`から呼び出されていない
-    - 現在は競合解決時のみ伝播が実行される（`conflict.service.ts`）
-    - 通常の同期フローでは、B/Cで変更されたイベントがAに伝播されない
-  - 必要修正:
-    - `backend/src/services/sync.service.ts`の`upsertEvent()`メソッドで、Canonical更新後に伝播処理を呼び出す
-    - `sync_direction`が`'bidirectional'`の場合のみ伝播を実行
-  - 実装見積もり: 2-3時間
-  - 依存: propagation.service.ts（実装済み）、sync.service.tsの修正
-
-**Phase 3 進捗: 87.5% (7/8機能)**
+**Phase 3 進捗: 100% (8/8機能)**
 
 ---
 
@@ -120,65 +94,15 @@
 | Phase | 完了 | 部分実装 | 未実装 | 進捗率 |
 |-------|------|----------|--------|--------|
 | Phase 1 | 6 | 0 | 0 | **100%** |
-| Phase 2 | 4 | 1 | 0 | **80%** |
-| Phase 3 | 7 | 1 | 0 | **87.5%** |
-| **全体** | **17** | **2** | **0** | **90%** |
+| Phase 2 | 5 | 0 | 0 | **100%** |
+| Phase 3 | 8 | 0 | 0 | **100%** |
+| **全体** | **19** | **0** | **0** | **100%** |
 
 ---
 
 ## 🔧 修正が必要な箇所
 
-### 1. [優先度: 高] 片方向同期の伝播処理統合
-
-**ファイル**: `backend/src/services/sync.service.ts`
-
-**問題**: `upsertEvent()`メソッドでCanonical更新後に伝播処理を呼び出していない
-
-**修正内容**:
-```typescript
-// backend/src/services/sync.service.ts の upsertEvent()メソッド内
-
-// 現在（139行目付近）:
-// f. 伝播はスキップ（Phase 3で実装）
-console.log(`Upserted event ${googleEvent.id} -> canonical ${canonicalEvent.id}`);
-
-// 修正後:
-// f. 伝播処理（片方向同期: A→B/C）
-const calendar = await calendarModel.findById(calendar.id);
-if (calendar.sync_enabled && calendar.sync_direction !== 'readonly') {
-  const eventLink = await eventLinkModel.findByAccountIdAndGcalEventId(
-    calendar.account_id,
-    googleEvent.id
-  );
-  if (eventLink) {
-    await propagationService.propagateEvent(
-      canonicalEvent.id,
-      eventLink.id,
-      syncOpId
-    );
-  }
-}
-console.log(`Upserted event ${googleEvent.id} -> canonical ${canonicalEvent.id}`);
-```
-
-**必要なimport追加**:
-```typescript
-import { propagationService } from './propagation.service';
-```
-
----
-
-### 2. [優先度: 高] 逆同期（B/C→A）の統合
-
-**ファイル**: `backend/src/services/sync.service.ts`
-
-**問題**: 双方向同期時に、B/Cで変更されたイベントがAに伝播されない
-
-**修正内容**: 上記の修正1と同じ（`sync_direction`が`'bidirectional'`の場合も伝播を実行）
-
-**注意**: `propagation.service.ts`は既に実装済みで、`sync_direction`に応じた処理は不要（全EventLinkに伝播するため）
-
----
+現時点で重大な未実装はありません。
 
 ## 📝 補足事項
 
@@ -194,14 +118,10 @@ import { propagationService } from './propagation.service';
 
 ## 🎯 次のステップ
 
-1. **即座に対応**:
-   - `sync.service.ts`の`upsertEvent()`メソッドに伝播処理を追加（修正1, 2）
-
-2. **短期対応（1週間以内）**:
+1. **短期対応（1週間以内）**:
    - 伝播処理の統合テスト
    - 双方向同期の動作確認
 
-3. **中期対応（1ヶ月以内）**:
-   - 重複ファイルの整理
+2. **中期対応（1ヶ月以内）**:
    - 統合テストの追加
    - パフォーマンス最適化

@@ -1,11 +1,17 @@
 import { calendarService } from '../../src/services/calendar.service';
 import { accountModel } from '../../src/models/accountModel';
 import { calendarModel } from '../../src/models/calendarModel';
+import { oauthService } from '../../src/services/oauth.service';
 import { google } from 'googleapis';
 
 // モック設定
 jest.mock('../../src/models/accountModel');
 jest.mock('../../src/models/calendarModel');
+jest.mock('../../src/services/oauth.service', () => ({
+  oauthService: {
+    getAuthenticatedClient: jest.fn()
+  }
+}));
 jest.mock('googleapis');
 
 describe('CalendarService', () => {
@@ -29,6 +35,7 @@ describe('CalendarService', () => {
       ];
 
       (accountModel.findById as jest.Mock).mockResolvedValue(mockAccount);
+      (oauthService.getAuthenticatedClient as jest.Mock).mockResolvedValue({});
       
       const mockCalendarApi = {
         calendarList: {
@@ -62,8 +69,9 @@ describe('CalendarService', () => {
       };
 
       (accountModel.findById as jest.Mock).mockResolvedValue(mockAccount);
+      (oauthService.getAuthenticatedClient as jest.Mock).mockRejectedValue(new Error('Access token not available'));
 
-      await expect(calendarService.fetchCalendars('test-id')).rejects.toThrow('Account does not have access token');
+      await expect(calendarService.fetchCalendars('test-id')).rejects.toThrow('Access token not available');
     });
   });
 
