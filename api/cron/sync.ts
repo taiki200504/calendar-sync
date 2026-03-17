@@ -1,19 +1,18 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { calendarModel } from '../../backend/src/models/calendarModel';
-import { syncQueue } from '../../backend/src/queues/sync.queue';
+import { syncService } from '../../backend/src/services/sync.service';
 import { logger } from '../../backend/src/utils/logger';
 
 /**
  * Vercel Cron Job: 定期同期スケジューラー
  * 15分ごとに実行される（vercel.jsonで設定）
+ * Vercelサーバーレス環境ではBullMQワーカーが動作しないため、直接同期を実行する
  */
 export default async function handler(
   req: VercelRequest,
   res: VercelResponse
 ) {
   // Vercel Cron Jobsからのリクエストか確認
-  // 注意: Vercelは自動的に認証ヘッダーを追加しますが、
-  // 手動で設定する場合はCRON_SECRET環境変数を設定してください
   if (process.env.CRON_SECRET) {
     const authHeader = req.headers.authorization;
     if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -30,47 +29,40 @@ export default async function handler(
 
     if (enabledCalendars.length === 0) {
       logger.info('No enabled calendars found');
-      return res.json({ 
-        success: true, 
+      return res.json({
+        success: true,
         message: 'No enabled calendars',
-        calendarsProcessed: 0 
+        calendarsProcessed: 0
       });
     }
 
     logger.info(`Syncing ${enabledCalendars.length} calendars...`);
 
-    // 各カレンダーをキューに追加
-    const queuedCalendars: string[] = [];
+    // 各カレンダーを直接同期（Vercelではキューワーカーが動かないため）
+    const syncedCalendars: string[] = [];
+    const errors: { calendarId: string; error: string }[] = [];
+
     for (const calendar of enabledCalendars) {
       try {
-        await syncQueue.add(
-          'sync',
-          { calendarId: calendar.id },
-          {
-            priority: 1,
-            attempts: 3,
-            backoff: {
-              type: 'exponential',
-              delay: 5000
-            }
-          }
-        );
-        queuedCalendars.push(calendar.id);
+        await syncService.syncCalendar(calendar.id);
+        syncedCalendars.push(calendar.id);
       } catch (error: any) {
-        logger.error(`Failed to queue sync for calendar ${calendar.id}`, {
+        logger.error(`Failed to sync calendar ${calendar.id}`, {
           error: error.message,
           calendarId: calendar.id
         });
+        errors.push({ calendarId: calendar.id, error: error.message });
       }
     }
 
-    logger.info(`Queued ${queuedCalendars.length} sync jobs`);
+    logger.info(`Synced ${syncedCalendars.length}/${enabledCalendars.length} calendars`);
 
     return res.json({
       success: true,
-      message: `Queued ${queuedCalendars.length} sync jobs`,
-      calendarsProcessed: queuedCalendars.length,
-      calendarIds: queuedCalendars
+      message: `Synced ${syncedCalendars.length} calendars`,
+      calendarsProcessed: syncedCalendars.length,
+      calendarIds: syncedCalendars,
+      errors: errors.length > 0 ? errors : undefined
     });
   } catch (error: any) {
     logger.error('Error in scheduled sync cron job', {

@@ -8,12 +8,6 @@ interface Toast {
   type: ToastType;
 }
 
-interface ToastContextValue {
-  toasts: Toast[];
-  addToast: (message: string, type: ToastType) => void;
-  removeToast: (id: string) => void;
-}
-
 // シンプルなグローバル状態管理
 let toastListeners: ((toasts: Toast[]) => void)[] = [];
 let toasts: Toast[] = [];

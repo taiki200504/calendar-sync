@@ -9,6 +9,7 @@ export function Layout() {
 
   const navigation = [
     { name: 'ダッシュボード', path: '/dashboard', icon: '📊' },
+    { name: '同期設定', path: '/sync', icon: '🔄' },
     { name: '空き時間検索', path: '/find-slots', icon: '🔍' },
     { name: 'ルール設定', path: '/rules', icon: '⚙️' }
   ];

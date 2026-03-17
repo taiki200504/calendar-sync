@@ -5,6 +5,7 @@ import { Dashboard } from './pages/Dashboard';
 import { FindSlots } from './pages/FindSlots';
 import { ConflictDetail } from './pages/ConflictDetail';
 import { RulesPage } from './pages/Rules';
+import { SyncPage } from './pages/SyncPage';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { Layout } from './components/Layout';
 import { ToastContainer } from './components/Toast';
@@ -24,6 +25,7 @@ function App() {
           }
         >
           <Route path="dashboard" element={<Dashboard />} />
+          <Route path="sync" element={<SyncPage />} />
           <Route path="find-slots" element={<FindSlots />} />
           <Route path="rules" element={<RulesPage />} />
           <Route path="conflicts/:id" element={<ConflictDetail />} />

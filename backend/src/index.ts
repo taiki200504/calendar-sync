@@ -18,19 +18,10 @@ import { rulesRouter } from './controllers/rules.controller';
 import { syncConnectionsRouter } from './controllers/syncConnections.controller';
 import cron from 'node-cron';
 import { renewExpiredWatches } from './jobs/watch-renewal.job';
+import { syncScheduler } from './jobs/syncScheduler';
 import { logger } from './utils/logger';
 
 dotenv.config();
-
-// ワーカー起動（エラーハンドリング付き）
-try {
-  console.log('🔄 Starting sync worker...');
-  require('./workers/sync.worker');
-  console.log('✅ Sync worker loaded');
-} catch (error) {
-  console.error('❌ Failed to load sync worker:', error);
-  // ワーカーのエラーでアプリケーション全体を停止させない
-}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -140,17 +131,18 @@ process.on('unhandledRejection', (reason, promise) => {
 try {
   app.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
-    logger.info('🚀 Server running', {
-      port: PORT,
-      environment: process.env.NODE_ENV || 'development'
+    logger.info('Server running', { port: PORT, environment: process.env.NODE_ENV || 'development' });
+    logger.info('CalendarSync OS Backend initialized');
+
+    // 定期同期スケジューラーを起動（15分間隔）
+    syncScheduler.startScheduler(15).catch((err) => {
+      logger.error('Failed to start sync scheduler', { error: err });
     });
-    logger.info('📅 CalendarSync OS Backend initialized');
-    logger.info('🔄 Sync worker started');
-    logger.info('🔄 Calendar sync worker started');
-    logger.info('⏰ Watch renewal job scheduled (every hour)');
+    logger.info('Sync scheduler started (every 15 minutes)');
+    logger.info('Watch renewal job scheduled (every hour)');
   });
 } catch (error) {
-  console.error('❌ Failed to start server:', error);
+  console.error('Failed to start server:', error);
   logger.error('Failed to start server', { error });
   process.exit(1);
 }

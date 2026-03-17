@@ -1,23 +1,8 @@
 import api from './api';
 
 export const syncService = {
-  async getSyncSettings() {
-    const response = await api.get('/sync/settings');
-    return response.data;
-  },
-
-  async updateSyncSettings(settings: any) {
-    const response = await api.put('/sync/settings', settings);
-    return response.data;
-  },
-
-  async triggerManualSync(calendarIds?: number[]) {
+  async triggerManualSync(calendarIds?: string[]) {
     const response = await api.post('/sync/manual', { calendarIds });
-    return response.data;
-  },
-
-  async getSyncStatus(jobId: string) {
-    const response = await api.get(`/sync/status/${jobId}`);
     return response.data;
   },
 

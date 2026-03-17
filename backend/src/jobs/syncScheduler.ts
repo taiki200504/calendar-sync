@@ -1,13 +1,15 @@
 import cron from 'node-cron';
 import { calendarModel } from '../models/calendarModel';
-import { syncQueue } from '../queues/sync.queue';
+import { syncService } from '../services/sync.service';
+import { logger } from '../utils/logger';
 
 export class SyncScheduler {
   private task: cron.ScheduledTask | null = null;
-  private intervalMinutes: number = 15; // デフォルト15分
+  private intervalMinutes: number = 15;
 
   /**
-   * スケジューラーを開始（新しいスキーマ対応）
+   * スケジューラーを開始
+   * 直接syncServiceを呼び出す（BullMQキューに依存しない）
    */
   async startScheduler(intervalMinutes: number = 15) {
     if (this.task) {
@@ -16,54 +18,40 @@ export class SyncScheduler {
 
     this.intervalMinutes = intervalMinutes;
     const cronExpression = `*/${intervalMinutes} * * * *`;
-    
-    console.log(`🕐 Sync scheduler started (interval: ${intervalMinutes} minutes)`);
+
+    logger.info(`Sync scheduler started (interval: ${intervalMinutes} minutes)`);
 
     this.task = cron.schedule(cronExpression, async () => {
       try {
-        console.log('Running scheduled sync...');
-        
-        // 同期が有効な全カレンダーを取得
+        logger.info('Running scheduled sync...');
+
         const calendars = await calendarModel.findAll();
         const enabledCalendars = calendars.filter(c => c.sync_enabled);
 
         if (enabledCalendars.length === 0) {
-          console.log('No enabled calendars found');
+          logger.info('No enabled calendars found');
           return;
         }
 
-        console.log(`Syncing ${enabledCalendars.length} calendars...`);
+        logger.info(`Syncing ${enabledCalendars.length} calendars...`);
 
-        // 各カレンダーをキューに追加
+        let synced = 0;
         for (const calendar of enabledCalendars) {
           try {
-            await syncQueue.add(
-              'sync',
-              { calendarId: calendar.id },
-              {
-                priority: 1,
-                attempts: 3,
-                backoff: {
-                  type: 'exponential',
-                  delay: 5000
-                }
-              }
-            );
+            await syncService.syncCalendar(calendar.id);
+            synced++;
           } catch (error: any) {
-            console.error(`Failed to queue sync for calendar ${calendar.id}:`, error);
+            logger.error(`Failed to sync calendar ${calendar.id}`, { error: error.message });
           }
         }
 
-        console.log(`Queued ${enabledCalendars.length} sync jobs`);
+        logger.info(`Synced ${synced}/${enabledCalendars.length} calendars`);
       } catch (error: any) {
-        console.error('Error in scheduled sync:', error);
+        logger.error('Error in scheduled sync', { error: error.message });
       }
     });
   }
 
-  /**
-   * 同期間隔を更新
-   */
   async updateInterval(intervalMinutes: number) {
     this.intervalMinutes = intervalMinutes;
     if (this.task) {
@@ -71,20 +59,14 @@ export class SyncScheduler {
     }
   }
 
-  /**
-   * スケジューラーを停止
-   */
   stop() {
     if (this.task) {
       this.task.stop();
       this.task = null;
-      console.log('Sync scheduler stopped');
+      logger.info('Sync scheduler stopped');
     }
   }
 
-  /**
-   * 現在の設定を取得
-   */
   getConfig() {
     return {
       intervalMinutes: this.intervalMinutes,

@@ -1,45 +1,44 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { syncService } from '../services/syncService';
 import { calendarService } from '../services/calendarService';
-import { useState } from 'react';
-
 export function SyncPage() {
   const queryClient = useQueryClient();
-  const [selectedCalendars, setSelectedCalendars] = useState<number[]>([]);
 
-  const { data: syncSettings, isLoading: settingsLoading } = useQuery({
-    queryKey: ['sync-settings'],
-    queryFn: () => syncService.getSyncSettings()
-  });
-
-  const { data: calendars, isLoading: calendarsLoading } = useQuery({
+  const { data: calendarsData, isLoading: calendarsLoading } = useQuery({
     queryKey: ['calendars'],
     queryFn: () => calendarService.getCalendars()
   });
 
-  const updateMutation = useMutation({
-    mutationFn: (settings: any) => syncService.updateSyncSettings(settings),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['sync-settings'] });
-    }
+  const { data: syncStatus } = useQuery({
+    queryKey: ['sync-status'],
+    queryFn: () => syncService.getOverallSyncStatus()
+  });
+
+  const { data: syncHistory } = useQuery({
+    queryKey: ['sync-history'],
+    queryFn: () => syncService.getSyncHistory(10)
   });
 
   const manualSyncMutation = useMutation({
-    mutationFn: (calendarIds?: number[]) =>
-      syncService.triggerManualSync(calendarIds),
+    mutationFn: () => syncService.triggerSync(),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['sync-history'] });
-      alert('同期ジョブをキューに追加しました');
+      queryClient.invalidateQueries({ queryKey: ['sync-status'] });
     }
   });
 
-  const handleSyncNow = () => {
-    const calendarIds =
-      selectedCalendars.length > 0 ? selectedCalendars : undefined;
-    manualSyncMutation.mutate(calendarIds);
-  };
+  const updateCalendarMutation = useMutation({
+    mutationFn: ({ id, updates }: { id: string; updates: any }) =>
+      calendarService.updateCalendar(id, updates),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['calendars'] });
+    }
+  });
 
-  if (settingsLoading || calendarsLoading) {
+  const calendars = calendarsData?.calendars ?? [];
+  const enabledCalendars = calendars.filter((c: any) => c.sync_enabled);
+
+  if (calendarsLoading) {
     return <div className="text-center py-8">読み込み中...</div>;
   }
 
@@ -48,118 +47,139 @@ export function SyncPage() {
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-gray-900">同期設定</h1>
         <p className="mt-2 text-sm text-gray-600">
-          カレンダーの同期間隔と動作を設定します
+          カレンダーごとの同期設定と手動同期を管理します
         </p>
       </div>
 
-      <div className="bg-white shadow rounded-lg p-6 mb-6">
-        <h2 className="text-lg font-medium text-gray-900 mb-4">
-          自動同期設定
-        </h2>
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700">
-              同期間隔（分）
-            </label>
-            <input
-              type="number"
-              min="5"
-              max="1440"
-              value={syncSettings?.syncInterval || 15}
-              onChange={(e) =>
-                updateMutation.mutate({
-                  syncInterval: parseInt(e.target.value)
-                })
-              }
-              className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-            />
-          </div>
-
-          <div>
-            <label className="flex items-center">
-              <input
-                type="checkbox"
-                checked={syncSettings?.bidirectional || false}
-                onChange={(e) =>
-                  updateMutation.mutate({ bidirectional: e.target.checked })
-                }
-                className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-              />
-              <span className="ml-2 text-sm text-gray-700">
-                双方向同期を有効にする
-              </span>
-            </label>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700">
-              競合解決方法
-            </label>
-            <select
-              value={syncSettings?.conflictResolution || 'newer'}
-              onChange={(e) =>
-                updateMutation.mutate({
-                  conflictResolution: e.target.value
-                })
-              }
-              className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-            >
-              <option value="source">ソース優先</option>
-              <option value="target">ターゲット優先</option>
-              <option value="newer">新しい方優先</option>
-              <option value="manual">手動解決</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-white shadow rounded-lg p-6">
-        <h2 className="text-lg font-medium text-gray-900 mb-4">
-          手動同期
-        </h2>
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              同期するカレンダー（未選択の場合はすべて）
-            </label>
-            <div className="space-y-2">
-              {calendars?.calendars
-                ?.filter((c: any) => c.sync_enabled)
-                .map((calendar: any) => (
-                  <label key={calendar.id} className="flex items-center">
-                    <input
-                      type="checkbox"
-                      checked={selectedCalendars.includes(calendar.id)}
-                      onChange={(e) => {
-                        if (e.target.checked) {
-                          setSelectedCalendars([
-                            ...selectedCalendars,
-                            calendar.id
-                          ]);
-                        } else {
-                          setSelectedCalendars(
-                            selectedCalendars.filter((id) => id !== calendar.id)
-                          );
-                        }
-                      }}
-                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                    />
-                    <span className="ml-2 text-sm text-gray-700">
-                      {calendar.name}
-                    </span>
-                  </label>
-                ))}
+      {/* 同期ステータス概要 */}
+      {syncStatus && (
+        <div className="bg-white shadow rounded-lg p-6 mb-6">
+          <h2 className="text-lg font-medium text-gray-900 mb-4">同期ステータス</h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="text-center">
+              <div className="text-2xl font-bold text-blue-600">{syncStatus.enabledCalendars || 0}</div>
+              <div className="text-sm text-gray-500">同期有効</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-gray-600">{syncStatus.totalCalendars || 0}</div>
+              <div className="text-sm text-gray-500">全カレンダー</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-green-600">{syncStatus.successRate ?? 100}%</div>
+              <div className="text-sm text-gray-500">成功率（7日間）</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-red-600">{syncStatus.errorCount || 0}</div>
+              <div className="text-sm text-gray-500">エラー（7日間）</div>
             </div>
           </div>
-          <button
-            onClick={handleSyncNow}
-            disabled={manualSyncMutation.isPending}
-            className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-md text-sm font-medium"
-          >
-            {manualSyncMutation.isPending ? '同期中...' : '今すぐ同期'}
-          </button>
         </div>
+      )}
+
+      {/* カレンダー同期設定 */}
+      <div className="bg-white shadow rounded-lg p-6 mb-6">
+        <h2 className="text-lg font-medium text-gray-900 mb-4">カレンダー同期設定</h2>
+        {calendars.length === 0 ? (
+          <p className="text-sm text-gray-500">カレンダーがまだ接続されていません。ダッシュボードからGoogleアカウントを連携してください。</p>
+        ) : (
+          <div className="space-y-3">
+            {calendars.map((calendar: any) => (
+              <div key={calendar.id} className="flex items-center justify-between p-3 border rounded-lg">
+                <div className="flex items-center space-x-3">
+                  <input
+                    type="checkbox"
+                    checked={calendar.sync_enabled}
+                    onChange={(e) =>
+                      updateCalendarMutation.mutate({
+                        id: calendar.id,
+                        updates: { sync_enabled: e.target.checked }
+                      })
+                    }
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <div>
+                    <div className="text-sm font-medium text-gray-900">{calendar.name}</div>
+                    {calendar.account_email && (
+                      <div className="text-xs text-gray-500">{calendar.account_email}</div>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <select
+                    value={calendar.sync_direction || 'bidirectional'}
+                    onChange={(e) =>
+                      updateCalendarMutation.mutate({
+                        id: calendar.id,
+                        updates: { sync_direction: e.target.value }
+                      })
+                    }
+                    className="text-xs border-gray-300 rounded-md"
+                  >
+                    <option value="bidirectional">双方向</option>
+                    <option value="readonly">読み取りのみ</option>
+                    <option value="writeonly">書き込みのみ</option>
+                  </select>
+                  <select
+                    value={calendar.privacy_mode || 'detail'}
+                    onChange={(e) =>
+                      updateCalendarMutation.mutate({
+                        id: calendar.id,
+                        updates: { privacy_mode: e.target.value }
+                      })
+                    }
+                    className="text-xs border-gray-300 rounded-md"
+                  >
+                    <option value="detail">詳細表示</option>
+                    <option value="busy-only">予定ありのみ</option>
+                  </select>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
+
+      {/* 手動同期 */}
+      <div className="bg-white shadow rounded-lg p-6 mb-6">
+        <h2 className="text-lg font-medium text-gray-900 mb-4">手動同期</h2>
+        <p className="text-sm text-gray-500 mb-4">
+          自動同期は15分間隔で実行されます。今すぐ同期する場合は以下のボタンを押してください。
+        </p>
+        <button
+          onClick={() => manualSyncMutation.mutate()}
+          disabled={manualSyncMutation.isPending || enabledCalendars.length === 0}
+          className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-md text-sm font-medium"
+        >
+          {manualSyncMutation.isPending ? '同期中...' : `今すぐ同期（${enabledCalendars.length}件）`}
+        </button>
+        {manualSyncMutation.isSuccess && (
+          <p className="mt-2 text-sm text-green-600">同期が完了しました</p>
+        )}
+        {manualSyncMutation.isError && (
+          <p className="mt-2 text-sm text-red-600">同期でエラーが発生しました</p>
+        )}
+      </div>
+
+      {/* 同期履歴 */}
+      {syncHistory && syncHistory.items && syncHistory.items.length > 0 && (
+        <div className="bg-white shadow rounded-lg p-6">
+          <h2 className="text-lg font-medium text-gray-900 mb-4">最近の同期履歴</h2>
+          <div className="space-y-2">
+            {syncHistory.items.map((item: any, index: number) => (
+              <div key={item.id || index} className="flex items-center justify-between text-sm p-2 border-b">
+                <span className="text-gray-600">
+                  {new Date(item.timestamp || item.created_at).toLocaleString('ja-JP')}
+                </span>
+                <span className={`px-2 py-0.5 rounded text-xs ${
+                  item.result === 'success' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                }`}>
+                  {item.result === 'success' ? '成功' : 'エラー'}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

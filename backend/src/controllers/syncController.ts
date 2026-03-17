@@ -3,7 +3,6 @@ import { authenticateToken, AuthRequest } from '../middleware/auth';
 import { accountModel } from '../models/accountModel';
 import { calendarModel } from '../models/calendarModel';
 import { db } from '../utils/database';
-import { syncQueue } from '../queues/sync.queue';
 import { syncService } from '../services/sync.service';
 
 export const syncRouter = Router();
@@ -11,28 +10,15 @@ export const syncRouter = Router();
 // 認証ミドルウェアを適用
 syncRouter.use(authenticateToken);
 
-/** 現在ユーザーの同期有効カレンダーをキューに追加（複数アカウント対応） */
-async function queueEnabledCalendarsForUser(sessionAccountId: string) {
+/** 現在ユーザーの同期有効カレンダーを取得（複数アカウント対応） */
+async function getEnabledCalendarsForUser(sessionAccountId: string) {
   const accountIds = await accountModel.findAccountIdsForCurrentUser(sessionAccountId);
   const enabledCalendars: { id: string }[] = [];
   for (const aid of accountIds) {
     const calendars = await calendarModel.findByAccountId(aid);
     enabledCalendars.push(...calendars.filter((c) => c.sync_enabled));
   }
-  const jobIds: string[] = [];
-  for (const cal of enabledCalendars) {
-    try {
-      const job = await syncQueue.add(
-        'sync',
-        { calendarId: cal.id },
-        { priority: 1, attempts: 3, backoff: { type: 'exponential', delay: 5000 } }
-      );
-      if (job.id) jobIds.push(job.id);
-    } catch (err) {
-      console.error(`Failed to queue sync for calendar ${cal.id}:`, err);
-    }
-  }
-  return { enabledCalendars, jobIds };
+  return { enabledCalendars };
 }
 
 // 同期ログ取得（新しいスキーマ対応）
@@ -120,7 +106,7 @@ syncRouter.post('/trigger', async (req: Request, res: Response) => {
       res.status(401).json({ error: 'Not authenticated' });
       return;
     }
-    const { enabledCalendars } = await queueEnabledCalendarsForUser(accountId);
+    const { enabledCalendars } = await getEnabledCalendarsForUser(accountId);
     if (enabledCalendars.length === 0) {
       return res.json({
         message: '同期対象のカレンダーがありません',
@@ -160,30 +146,37 @@ syncRouter.post('/manual', async (req: Request, res: Response) => {
     }
 
     const { calendarIds } = req.body;
+    let calendarsToSync: { id: string }[] = [];
 
     if (calendarIds && Array.isArray(calendarIds) && calendarIds.length > 0) {
       const calendars = await calendarModel.findByAccountId(accountId);
-      const filtered = calendars.filter((c) => calendarIds.includes(c.id) && c.sync_enabled);
-      if (filtered.length === 0) {
+      calendarsToSync = calendars.filter((c) => calendarIds.includes(c.id) && c.sync_enabled);
+      if (calendarsToSync.length === 0) {
         return res.status(400).json({ error: 'No enabled calendars found' });
       }
-      const jobIds: string[] = [];
-      for (const cal of filtered) {
-        try {
-          const job = await syncQueue.add('sync', { calendarId: cal.id }, { priority: 1, attempts: 3, backoff: { type: 'exponential', delay: 5000 } });
-          if (job.id) jobIds.push(job.id);
-        } catch (err) {
-          console.error(`Failed to queue sync for calendar ${cal.id}:`, err);
-        }
-      }
-      return res.json({ message: '同期を開始しました', calendarsQueued: filtered.length, jobIds });
+    } else {
+      const { enabledCalendars } = await getEnabledCalendarsForUser(accountId);
+      calendarsToSync = enabledCalendars;
     }
 
-    const { enabledCalendars, jobIds } = await queueEnabledCalendarsForUser(accountId);
+    if (calendarsToSync.length === 0) {
+      return res.json({ message: '同期対象のカレンダーがありません', calendarsSynced: 0 });
+    }
+
+    let synced = 0;
+    for (const cal of calendarsToSync) {
+      try {
+        await syncService.syncCalendar(cal.id);
+        synced += 1;
+      } catch (err) {
+        console.error(`Sync failed for calendar ${cal.id}:`, err);
+      }
+    }
+
     return res.json({
-      message: enabledCalendars.length > 0 ? '同期を開始しました' : 'No enabled calendars found',
-      calendarsQueued: enabledCalendars.length,
-      jobIds,
+      message: synced > 0 ? '同期しました' : '同期でエラーが発生しました',
+      calendarsSynced: synced,
+      calendarsTotal: calendarsToSync.length,
     });
   } catch (error: unknown) {
     console.error('Sync trigger error:', error);
@@ -194,35 +187,13 @@ syncRouter.post('/manual', async (req: Request, res: Response) => {
   }
 });
 
-// 同期ステータス取得（ジョブID指定）
-syncRouter.get('/status/:jobId', async (req: Request, res: Response) => {
-  try {
-    const { jobId } = req.params;
-    const job = await syncQueue.getJob(jobId);
-
-    if (!job) {
-      res.status(404).json({ error: 'Job not found' });
-      return;
-    }
-
-    const state = await job.getState();
-    const progress = job.progress;
-    const result = job.returnvalue;
-    const failedReason = job.failedReason;
-
-    res.json({
-      jobId,
-      state,
-      progress,
-      result,
-      failedReason
-    });
-    return;
-  } catch (error: any) {
-    console.error('Error fetching sync status:', error);
-    res.status(500).json({ error: 'Failed to fetch sync status', message: error.message });
-    return;
-  }
+// 同期ステータス取得（ジョブID指定 - レガシー互換）
+syncRouter.get('/status/:jobId', async (_req: Request, res: Response) => {
+  // 直接同期方式に移行したため、ジョブIDベースのステータスは非対応
+  return res.json({
+    message: 'Direct sync mode - use GET /sync/status for overall status',
+    state: 'completed'
+  });
 });
 
 // 同期ステータス取得（全体統計）
