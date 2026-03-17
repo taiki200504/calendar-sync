@@ -2,10 +2,7 @@ import express from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
 import helmet from 'helmet';
-import session from 'express-session';
-// @ts-ignore - connect-redis v6 doesn't have proper TypeScript definitions
-import connectRedis from 'connect-redis';
-import Redis from 'ioredis';
+import { clerkMiddleware } from '@clerk/express';
 import { errorHandler } from '../backend/src/middleware/errorHandler';
 import { authRouter } from '../backend/src/controllers/auth.controller';
 import { accountRouter } from '../backend/src/controllers/account.controller';
@@ -35,66 +32,16 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Redis client for session store
-const redisUrl = process.env.REDIS_URL || 'redis://localhost:6379';
-let redisClient: Redis | null = null;
-
-try {
-  redisClient = new Redis(redisUrl, {
-    maxRetriesPerRequest: null,
-    enableReadyCheck: false,
-    lazyConnect: true
-  });
-
-  redisClient.on('error', (err) => {
-    logger.error('Redis Client Error', { error: err });
-  });
-
-  redisClient.on('connect', () => {
-    logger.info('Redis Client Connected');
-  });
-} catch (error) {
-  logger.error('Failed to create Redis client', { error });
-}
-
-// Session management with Redis store
-const sessionConfig: session.SessionOptions = {
-  secret: process.env.SESSION_SECRET || 'your-session-secret-key-change-this-in-production',
-  resave: false,
-  saveUninitialized: false,
-  name: 'connect.sid',
-  proxy: true, // Vercel用: プロキシ経由のリクエストを信頼
-  cookie: {
-    secure: process.env.NODE_ENV === 'production', // HTTPS必須（sameSite: 'none'の場合は必須）
-    httpOnly: true,
-    maxAge: 24 * 60 * 60 * 1000, // 24 hours
-    sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', // クロスオリジン対応
-    domain: undefined // ドメインを指定しない（すべてのサブドメインで動作）
-  }
-};
-
-// Redisストアが利用可能な場合は使用、そうでない場合はメモリストア（開発環境用）
-if (redisClient) {
-  const RedisStore = connectRedis(session);
-  sessionConfig.store = new RedisStore({
-    client: redisClient as any, // ioredis v5との型互換性のため
-    prefix: 'sess:'
-  });
-  logger.info('Session store: Redis');
-} else {
-  logger.warn('Session store: Memory (Redis not available)');
-}
-
-app.use(session(sessionConfig));
+// Clerk middleware
+app.use(clerkMiddleware());
 
 // Health check
 app.get('/health', (_req, res) => {
-  return res.json({ 
-    status: 'ok', 
+  return res.json({
+    status: 'ok',
     timestamp: new Date().toISOString(),
     env: {
       hasDatabaseUrl: !!process.env.DATABASE_URL,
-      hasRedisUrl: !!process.env.REDIS_URL,
       nodeEnv: process.env.NODE_ENV
     }
   });

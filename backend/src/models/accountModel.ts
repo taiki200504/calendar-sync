@@ -5,6 +5,7 @@ export interface Account {
   email: string;
   provider: string;
   supabase_user_id: string | null;
+  clerk_user_id: string | null;
   oauth_access_token: string | null;
   oauth_refresh_token: string | null;
   oauth_expires_at: Date | null;
@@ -38,16 +39,69 @@ class AccountModel {
     return result.rows[0] || null;
   }
 
-  /** 同一 Supabase ユーザーに紐づく全アカウントIDを取得（複数アカウント対応） */
+  async findByClerkUserId(clerkUserId: string): Promise<Account | null> {
+    const result = await db.query<Account>(
+      'SELECT * FROM accounts WHERE clerk_user_id = $1',
+      [clerkUserId]
+    );
+    return result.rows[0] || null;
+  }
+
+  async upsertByClerkUserId(data: {
+    clerk_user_id: string;
+    email: string;
+    provider?: string;
+  }): Promise<Account> {
+    // First check by clerk_user_id
+    const existing = await this.findByClerkUserId(data.clerk_user_id);
+    if (existing) return existing;
+
+    // Then check by email
+    const byEmail = await this.findByEmail(data.email);
+    if (byEmail) {
+      return await this.update(byEmail.id, { clerk_user_id: data.clerk_user_id });
+    }
+
+    // Create new
+    return await this.create({
+      email: data.email,
+      provider: data.provider || 'google',
+      clerk_user_id: data.clerk_user_id,
+    });
+  }
+
+  /** Find all accounts linked to same Clerk user */
+  async findAccountIdsForClerkUser(clerkUserId: string): Promise<string[]> {
+    const result = await db.query<{ id: string }>(
+      'SELECT id FROM accounts WHERE clerk_user_id = $1 ORDER BY created_at DESC',
+      [clerkUserId]
+    );
+    return result.rows.map(r => r.id);
+  }
+
+  /** 同一ユーザーに紐づく全アカウントIDを取得（複数アカウント対応） */
   async findAccountIdsForCurrentUser(sessionAccountId: string): Promise<string[]> {
     const account = await this.findById(sessionAccountId);
     if (!account) return [sessionAccountId];
-    if (!account.supabase_user_id) return [sessionAccountId];
-    const result = await db.query<{ id: string }>(
-      'SELECT id FROM accounts WHERE supabase_user_id = $1 ORDER BY created_at DESC',
-      [account.supabase_user_id]
-    );
-    return result.rows.map((r) => r.id);
+
+    // Try clerk_user_id first, then supabase_user_id
+    if (account.clerk_user_id) {
+      const result = await db.query<{ id: string }>(
+        'SELECT id FROM accounts WHERE clerk_user_id = $1 ORDER BY created_at DESC',
+        [account.clerk_user_id]
+      );
+      return result.rows.map(r => r.id);
+    }
+
+    if (account.supabase_user_id) {
+      const result = await db.query<{ id: string }>(
+        'SELECT id FROM accounts WHERE supabase_user_id = $1 ORDER BY created_at DESC',
+        [account.supabase_user_id]
+      );
+      return result.rows.map(r => r.id);
+    }
+
+    return [sessionAccountId];
   }
 
   async findByIds(ids: string[]): Promise<Account[]> {
@@ -69,19 +123,21 @@ class AccountModel {
     email: string;
     provider?: string;
     supabase_user_id?: string | null;
+    clerk_user_id?: string | null;
     oauth_access_token?: string;
     oauth_refresh_token?: string;
     oauth_expires_at?: Date | null;
     workspace_flag?: boolean;
   }): Promise<Account> {
     const result = await db.query<Account>(
-      `INSERT INTO accounts (email, provider, supabase_user_id, oauth_access_token, oauth_refresh_token, oauth_expires_at, workspace_flag)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)
+      `INSERT INTO accounts (email, provider, supabase_user_id, clerk_user_id, oauth_access_token, oauth_refresh_token, oauth_expires_at, workspace_flag)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
        RETURNING *`,
       [
         accountData.email,
         accountData.provider || 'google',
         accountData.supabase_user_id ?? null,
+        accountData.clerk_user_id ?? null,
         accountData.oauth_access_token || null,
         accountData.oauth_refresh_token || null,
         accountData.oauth_expires_at || null,
@@ -93,6 +149,7 @@ class AccountModel {
 
   async update(id: string, updates: {
     supabase_user_id?: string | null;
+    clerk_user_id?: string | null;
     oauth_access_token?: string;
     oauth_refresh_token?: string;
     oauth_expires_at?: Date | null;
@@ -108,6 +165,11 @@ class AccountModel {
     if (updates.supabase_user_id !== undefined) {
       updateFields.push(`supabase_user_id = $${paramIndex}`);
       values.push(updates.supabase_user_id);
+      paramIndex++;
+    }
+    if (updates.clerk_user_id !== undefined) {
+      updateFields.push(`clerk_user_id = $${paramIndex}`);
+      values.push(updates.clerk_user_id);
       paramIndex++;
     }
     if (updates.oauth_access_token !== undefined) {
@@ -141,22 +203,22 @@ class AccountModel {
 
     // updated_atを自動更新
     updateFields.push(`updated_at = NOW()`);
-    
+
     // WHERE句のパラメータ
     values.push(id);
     const whereParam = `$${paramIndex}`;
 
     const query = `
-      UPDATE accounts 
+      UPDATE accounts
       SET ${updateFields.join(', ')}
       WHERE id = ${whereParam}
       RETURNING *
     `.trim();
 
     // デバッグ: 生成されたクエリとパラメータをログ出力
-    console.log('🔍 UPDATE Query:', query);
-    console.log('🔍 UPDATE Params:', values);
-    console.log('🔍 Param count:', values.length, 'Expected:', paramIndex);
+    console.log('UPDATE Query:', query);
+    console.log('UPDATE Params:', values);
+    console.log('Param count:', values.length, 'Expected:', paramIndex);
 
     const result = await db.query<Account>(query, values);
 
@@ -194,7 +256,7 @@ class AccountModel {
   }): Promise<Account> {
     // 既存のアカウントを検索
     const existing = await this.findByEmail(accountData.email);
-    
+
     if (existing) {
       // 既存のアカウントを更新
       return await this.update(existing.id, {

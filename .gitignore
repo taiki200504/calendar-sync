@@ -60,3 +60,4 @@ temp/
 *.key
 *.crt
 .vercel
+.env.vercel

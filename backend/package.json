@@ -23,6 +23,7 @@
   "author": "",
   "license": "MIT",
   "dependencies": {
+    "@clerk/express": "^2.0.4",
     "@types/connect-redis": "^0.0.23",
     "@types/cors": "^2.8.17",
     "@types/express-session": "^1.18.2",

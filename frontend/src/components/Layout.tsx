@@ -1,10 +1,9 @@
 import { useState } from 'react';
 import { Outlet, Link, useLocation } from 'react-router-dom';
-import { useAuthStore } from '../hooks/useAuthStore';
+import { UserButton } from '@clerk/clerk-react';
 
 export function Layout() {
   const location = useLocation();
-  const { logout } = useAuthStore();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navigation = [
@@ -42,13 +41,10 @@ export function Layout() {
               </div>
             </div>
             <div className="flex items-center">
-              {/* Desktop logout button */}
-              <button
-                onClick={logout}
-                className="hidden sm:block text-gray-500 hover:text-gray-700 px-3 py-2 rounded-md text-sm font-medium transition-colors"
-              >
-                ログアウト
-              </button>
+              {/* Desktop user button */}
+              <div className="hidden sm:block">
+                <UserButton afterSignOutUrl="/sign-in" />
+              </div>
               {/* Mobile menu button */}
               <button
                 type="button"
@@ -89,15 +85,9 @@ export function Layout() {
                 {item.name}
               </Link>
             ))}
-            <button
-              onClick={() => {
-                setMobileMenuOpen(false);
-                logout();
-              }}
-              className="w-full text-left border-transparent text-red-600 hover:bg-red-50 hover:border-red-300 block pl-3 pr-4 py-2 border-l-4 text-base font-medium transition-colors"
-            >
-              🚪 ログアウト
-            </button>
+            <div className="px-3 py-2">
+              <UserButton afterSignOutUrl="/sign-in" />
+            </div>
           </div>
         </div>
       </nav>
